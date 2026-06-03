@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cubase Tone Assistant</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>Cubase Tone Assistant</h1>
+          <p>YouTube tone detection và điều khiển Cubase qua MIDI remote.</p>
+        </div>
+        <div class="actions">
+          <button id="openYoutube">Mở YouTube</button>
+          <button id="openCubase">Mở Cubase</button>
+        </div>
+      </header>
+
+      <section class="youtube-panel">
+        <div class="youtube-toolbar">
+          <div>
+            <h2>YouTube</h2>
+            <p id="youtubeStatus">YouTube sẽ mở ở cửa sổ riêng</p>
+          </div>
+          <div class="youtube-url">
+            <input id="youtubeNavigateUrl" type="url" placeholder="https://www.youtube.com" />
+            <button id="navigateYoutube">Mở cửa sổ YouTube</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="panel status-panel">
+          <div class="panel-title">
+            <h2>Dò tone realtime</h2>
+            <span id="engineStatus" class="badge">Đang chờ</span>
+          </div>
+          <div class="tone-readout">
+            <div>
+              <span class="label">Tone hiện tại</span>
+              <strong id="currentKey">--</strong>
+            </div>
+            <div>
+              <span class="label">Độ tin cậy</span>
+              <strong id="confidence">0%</strong>
+            </div>
+          </div>
+          <div class="meter">
+            <div id="confidenceBar"></div>
+          </div>
+          <div class="tone-meta">
+            <span id="analysisLatency">Analysis: -- ms</span>
+            <span id="analysisWindow">Window: -- s</span>
+            <span id="uiHeartbeat">UI: --</span>
+          </div>
+          <div class="row">
+            <button id="startAnalyze">Bắt đầu dò tone</button>
+            <button id="sendKeyCubase" class="secondary">Gửi tone sang Cubase</button>
+            <button id="stopAnalyze" class="secondary">Dừng</button>
+          </div>
+          <p class="hint">Engine nghe audio hệ thống bằng WASAPI loopback. Khi YouTube phát bài mới, tone sẽ cập nhật theo từng cửa sổ thời gian.</p>
+        </article>
+
+        <article class="panel">
+          <div class="panel-title">
+            <h2>Điều khiển Cubase</h2>
+            <span id="midiStatus" class="badge">MIDI</span>
+          </div>
+          <div class="transport">
+            <button data-cubase="play">Play</button>
+            <button data-cubase="stop">Stop</button>
+            <button data-cubase="record">Record</button>
+            <button data-cubase="cycle">Cycle</button>
+            <button data-cubase="metronome">Metro</button>
+          </div>
+          <div class="volume-controls">
+            <label>
+              Âm lượng mic
+              <span class="slider-line">
+                <input id="micVolume" data-midi-cc="10" data-control-name="Selected Volume" type="range" min="0" max="127" value="90" />
+                <strong id="micVolumeValue">90</strong>
+              </span>
+            </label>
+            <label>
+              Volume Cubase
+              <span class="slider-line">
+                <input id="cubaseVolume" data-midi-cc="11" data-control-name="Selected Pan" type="range" min="0" max="127" value="64" />
+                <strong id="cubaseVolumeValue">64</strong>
+              </span>
+            </label>
+          </div>
+          <div class="track-buttons">
+            <button class="secondary" data-midi-button="12">Mute</button>
+            <button class="secondary" data-midi-button="13">Solo</button>
+            <button class="secondary" data-midi-button="14">Monitor</button>
+            <button class="secondary" data-midi-button="15">Rec Arm</button>
+          </div>
+          <div class="volume-controls">
+            <label>
+              Send 1 Level
+              <span class="slider-line">
+                <input id="send1Level" data-midi-cc="20" data-control-name="Send 1 Level" type="range" min="0" max="127" value="0" />
+                <strong id="send1LevelValue">0</strong>
+              </span>
+            </label>
+            <label>
+              Send 2 Level
+              <span class="slider-line">
+                <input id="send2Level" data-midi-cc="22" data-control-name="Send 2 Level" type="range" min="0" max="127" value="0" />
+                <strong id="send2LevelValue">0</strong>
+              </span>
+            </label>
+          </div>
+          <div class="track-buttons">
+            <button class="secondary" data-midi-button="21">Send 1 On</button>
+            <button class="secondary" data-midi-button="23">Send 2 On</button>
+          </div>
+          <label>
+            MIDI output
+            <select id="midiOutput"></select>
+          </label>
+          <div class="midi-actions">
+            <button id="refreshMidi" class="secondary">Làm mới MIDI</button>
+            <button id="testMidi" class="secondary">Test MIDI</button>
+          </div>
+        </article>
+
+        <article class="panel wide">
+          <div class="panel-title">
+            <h2>Cấu hình</h2>
+            <span class="badge">Windows</span>
+          </div>
+          <div class="settings-grid">
+            <label>
+              YouTube URL
+              <input id="youtubeUrl" type="url" placeholder="https://www.youtube.com" />
+            </label>
+            <label>
+              Python
+              <input id="pythonPath" type="text" placeholder="python" />
+            </label>
+            <label class="path-field">
+              Cubase executable
+              <span>
+                <input id="cubasePath" type="text" placeholder="C:\\Program Files\\Steinberg\\Cubase...\\Cubase.exe" />
+                <button id="pickCubase" class="secondary">Chọn</button>
+              </span>
+            </label>
+            <label class="checkline">
+              <input id="autoYoutube" type="checkbox" />
+              Tự mở YouTube khi bật app
+            </label>
+            <label class="checkline">
+              <input id="autoCubase" type="checkbox" />
+              Tự mở Cubase chạy nền khi bật app
+            </label>
+          </div>
+          <button id="saveConfig">Lưu cấu hình</button>
+        </article>
+
+        <article class="panel wide">
+          <div class="panel-title">
+            <h2>Log</h2>
+            <button id="clearLog" class="secondary">Xóa</button>
+          </div>
+          <pre id="log"></pre>
+        </article>
+      </section>
+    </main>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

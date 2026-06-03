@@ -1,0 +1,23 @@
+{
+  "name": "cubase-youtube-tone-assistant",
+  "version": "0.1.0",
+  "description": "Electron UI with Python/librosa engine for realtime YouTube tone detection and basic Cubase control.",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "install:cubase-remote": "powershell -ExecutionPolicy Bypass -File scripts/install-cubase-midi-remote.ps1"
+  },
+  "keywords": [
+    "electron",
+    "cubase",
+    "youtube",
+    "librosa",
+    "audio"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^31.7.7"
+  }
+}
