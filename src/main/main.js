@@ -226,11 +226,15 @@ function closeYoutubeWindow() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 460,
-    height: 620,
-    minWidth: 400,
-    minHeight: 500,
-    backgroundColor: '#eef1f2',
+    width: 640,
+    height: 180,
+    minWidth: 600,
+    minHeight: 160,
+    backgroundColor: '#00000000',
+    autoHideMenuBar: true,
+    frame: false,
+    transparent: true,
+    resizable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -238,8 +242,13 @@ function createWindow() {
       backgroundThrottling: false
     }
   });
+  mainWindow.setMenuBarVisibility(false);
 
-  mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  if (process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+  } else {
+    mainWindow.loadFile(path.join(app.getAppPath(), 'dist', 'renderer', 'index.html'));
+  }
 }
 
 app.whenReady().then(() => {
