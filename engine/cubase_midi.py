@@ -46,6 +46,12 @@ def list_outputs() -> list[str]:
     return mido.get_output_names()
 
 
+def list_inputs() -> list[str]:
+    if mido is None:
+        raise RuntimeError("Missing dependency: mido/python-rtmidi. Install Python requirements first.")
+    return mido.get_input_names()
+
+
 def send_transport(action: str, output_name: str = "") -> None:
     if mido is None:
         raise RuntimeError("Missing dependency: mido/python-rtmidi. Install Python requirements first.")
@@ -91,6 +97,7 @@ def send_control_cc(control: int, value: int, output_name: str = "", channel: in
     target = output_name if output_name in outputs else outputs[0]
     safe_control = max(0, min(127, int(control)))
     safe_value = max(0, min(127, int(value)))
+    safe_channel = max(0, min(15, int(channel)))
 
     with mido.open_output(target) as port:
-        port.send(mido.Message("control_change", channel=channel, control=safe_control, value=safe_value))
+        port.send(mido.Message("control_change", channel=safe_channel, control=safe_control, value=safe_value))

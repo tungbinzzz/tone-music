@@ -6,10 +6,10 @@ App Windows dùng Electron làm UI và Python/librosa làm engine để:
 - Mở YouTube trong một cửa sổ Electron riêng và theo dõi video được chọn để tự trigger dò tone.
 - Tự mở Cubase nếu đã cấu hình đường dẫn `.exe`.
 - Nghe audio hệ thống bằng WASAPI loopback.
-- Dò tone realtime từ bài đang phát trên YouTube.
+- Dò tone chính của bài đang phát trên YouTube bằng cách gom nhiều cửa sổ phân tích.
 - Điều khiển Cubase cơ bản qua MIDI Remote API: Play, Stop, Record.
 - Gửi tone hiện tại sang Cubase qua MIDI CC 30 để bạn map thêm nếu cần transpose/tone workflow.
-- Điều khiển selected track volume/pan/mute/solo/monitor/record và Send 1/2 theo ToneLink MIDI Remote script.
+- Điều khiển đúng các chức năng trong XML remote description: Beat/Mic monitor, Remix, Lofi, Vang, Tune, Key, Scale, Delay, Bè, Flex Tune.
 
 ## Yêu cầu
 
@@ -48,6 +48,19 @@ Lần đầu mở app:
 4. Mở cửa sổ YouTube từ app và chọn một video.
 5. App sẽ tự trigger dò tone khi URL chuyển sang video YouTube. Nút `Bắt đầu dò tone` vẫn dùng được để bật thủ công.
 
+## Giảm RAM khi sử dụng
+
+App dùng Electron nên mỗi cửa sổ là một Chromium process. Cửa sổ YouTube thường là phần tốn RAM nhất.
+
+Các tối ưu hiện có:
+
+- Python engine không khởi động ngay khi mở app; chỉ khởi động khi bấm `Làm mới MIDI`, `Test MIDI`, dùng control MIDI, hoặc bắt đầu dò tone.
+- App không tự refresh MIDI ở startup để tránh bật Python engine sớm.
+- Bấm `Dừng` sẽ dừng analyzer và tắt Python engine để giải phóng RAM.
+- Bấm `Đóng YouTube` để đóng cửa sổ YouTube riêng và giải phóng Chromium process đó.
+
+Nếu muốn dùng RAM thấp nhất, tắt `Tự mở YouTube khi bật app`, chỉ mở YouTube khi cần dò tone.
+
 ## Cấu hình Cubase
 
 Để nhận lệnh từ app:
@@ -55,7 +68,7 @@ Lần đầu mở app:
 1. Tạo một MIDI loopback port bằng loopMIDI.
 2. Trong Cubase, bật input MIDI từ port đó.
 3. Cài MIDI Remote script trong thư mục `cubase_remote`, hoặc chạy lệnh install bên dưới.
-4. Chọn selected track trong Cubase để các control volume/pan/mute/solo/monitor/record tác động đúng track.
+4. Trong project Cubase, mixer bank cần đặt Track 1 là Beat/Nhạc và Track 2 là Mic/Vocal để mapping tác động đúng.
 5. Với tone, app đang gửi MIDI CC 30. Script ToneLink hiện chưa map CC30, nên bạn có thể thêm mapping tone/transpose sau.
 
 ## Cài Cubase MIDI Remote API script
@@ -86,24 +99,27 @@ Sau đó trong Cubase:
 4. Chọn device `ToneLink / ToneLink App`.
 5. Chọn MIDI input là loopMIDI port mà app đang gửi tới.
 
-Mapping mặc định của script:
+Mapping của script và UI hiện tại:
 
-- `CC 1`: Play.
-- `CC 2`: Stop.
-- `CC 3`: Record.
-- `CC 4`: Cycle.
-- `CC 5`: Metronome.
-- `CC 10`: Selected track volume.
-- `CC 11`: Selected track pan.
-- `CC 12`: Selected track mute.
-- `CC 13`: Selected track solo.
-- `CC 14`: Selected track monitor.
-- `CC 15`: Selected track record enable.
-- `CC 20`: Send 1 level.
-- `CC 21`: Send 1 on.
-- `CC 22`: Send 2 level.
-- `CC 23`: Send 2 on.
-- `CC 30`: Detected key, sent by the app but not mapped in the provided ToneLink script yet.
+- Channel 1, CC20: Beat monitor.
+- Channel 1, CC21: Mic monitor.
+- Channel 1, CC2: Volume Beat.
+- Channel 1, CC3: Volume Mic.
+- Channel 1, CC5: Volume Vang Dài.
+- Channel 1, CC8: Volume Vang Ngắn.
+- Channel 1, CC9: Delay.
+- Channel 1, CC24: Vang on/off.
+- Channel 1, CC25: Lofi bypass.
+- Channel 1, CC22: Remix bypass.
+- Channel 1, CC27: Autotune bypass.
+- Channel 1, CC26: Tăng tông beat plugin on/off.
+- Channel 1, CC13: Mở Auto Key.
+- Channel 1, CC18: Scale Autotune.
+- Channel 1, CC17: Key Autotune.
+- Channel 1, CC6: Tune Amount.
+- Channel 1, CC11: Flex Tune.
+- Channel 1, CC10: Bè / Harmony quick control.
+- Channel 1, CC7: Tăng tông beat quick control.
 
 ## Kiểm tra loopMIDI và Cubase
 
@@ -154,14 +170,18 @@ Nếu mở YouTube bằng trình duyệt ngoài như Chrome/Edge độc lập, a
 
 ## Ghi chú về realtime
 
-Engine đang phân tích theo streaming window để phản hồi nhanh hơn:
+Engine đang phân tích theo streaming window, nhưng UI hiển thị tone chính của bài thay vì tone tức thời từng cửa sổ:
 
 - Thu audio theo chunk 0.5 giây.
-- Có kết quả đầu tiên sau khoảng 1 giây nếu audio đủ lớn.
+- Tính `instant_key` cho từng cửa sổ để tham khảo/debug.
+- Gom các kết quả đủ confidence thành phiếu bầu.
+- Chỉ hiển thị `Tone chính` sau khi đủ số phiếu tối thiểu, mặc định 12 phiếu.
 - Cửa sổ phân tích trượt tối đa 2 giây.
 - Mode `fast` dùng chroma thuần `numpy` để tránh chi phí khởi tạo `librosa` ở lần dò đầu tiên.
 - Engine warm-up detector trong nền khi khởi động để tránh lần phân tích đầu tiên bị chậm.
 
-Nếu muốn kết quả ổn định hơn nhưng chậm hơn, có thể tăng `window_seconds` hoặc đổi mode sang `accurate` trong `engine/audio_loopback.py`. Mode `accurate` mới dùng `librosa.chroma_cqt`.
+Khi người dùng chọn video YouTube mới hoặc bấm `Bắt đầu dò tone`, app reset bộ gom để tone chính không bị lẫn với bài trước.
+
+Nếu muốn kết quả ổn định hơn nhưng chậm hơn, có thể tăng `min_main_key_votes` hoặc `window_seconds` trong `engine/audio_loopback.py`. Mode `accurate` mới dùng `librosa.chroma_cqt`.
 
 UI có thêm chỉ báo `UI: hh:mm:ss` trong panel dò tone. Chỉ báo này được render bằng `requestAnimationFrame`. Khi đang click/xem YouTube nhúng, nếu `UI` vẫn đổi thời gian nhưng tone không đổi thì vấn đề nằm ở engine/audio event. Nếu `UI` cũng đứng, vấn đề là renderer/webview bị throttle hoặc compositor không repaint.

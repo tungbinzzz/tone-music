@@ -1,7 +1,7 @@
 :root {
   color-scheme: light;
   font-family: "Segoe UI", Arial, sans-serif;
-  background: #f4f1ea;
+  background: #eef1f2;
   color: #222629;
 }
 
@@ -11,7 +11,7 @@
 
 body {
   margin: 0;
-  min-width: 760px;
+  min-width: 400px;
 }
 
 button,
@@ -24,14 +24,21 @@ button {
   border: 1px solid #1f5e67;
   background: #1f5e67;
   color: #fff;
-  border-radius: 8px;
-  padding: 7px 10px;
+  border-radius: 7px;
+  padding: 6px 9px;
   cursor: pointer;
+  min-height: 32px;
 }
 
 button.secondary {
   background: #fff;
   color: #1f5e67;
+}
+
+button.active {
+  background: #f3c334;
+  border-color: #d7a40f;
+  color: #1f2326;
 }
 
 button:hover {
@@ -42,8 +49,8 @@ input,
 select {
   width: 100%;
   border: 1px solid #c9c2b5;
-  border-radius: 8px;
-  padding: 7px 9px;
+  border-radius: 7px;
+  padding: 6px 8px;
   background: #fff;
   color: #222629;
 }
@@ -55,28 +62,41 @@ label {
   font-size: 12px;
 }
 
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.inline-check input {
+  width: auto;
+}
+
 .app-shell {
-  padding: 14px;
+  width: min(100vw, 460px);
+  margin: 0 auto;
+  padding: 6px;
 }
 
 .topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .topbar h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 18px;
   letter-spacing: 0;
 }
 
 .topbar p {
   margin: 2px 0 0;
   color: #687076;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .actions,
@@ -85,56 +105,80 @@ label {
 .midi-actions,
 .track-buttons {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+}
+
+.icon-button {
+  width: 34px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .track-buttons {
   margin: 10px 0;
 }
 
-.youtube-panel {
+.control-buttons {
   display: grid;
-  gap: 8px;
-  margin-bottom: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
-.youtube-toolbar {
+.control-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 0.6fr) 1fr;
-  align-items: end;
+  grid-template-columns: 1fr;
+  gap: 7px;
+}
+
+.key-scale-test {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e3ddd2;
 }
 
-.youtube-toolbar h2 {
-  margin: 0;
-  font-size: 15px;
+.key-scale-test span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
-.youtube-toolbar p {
-  margin: 4px 0 0;
-  color: #687076;
-  font-size: 11px;
+.key-scale-test input {
+  min-width: 0;
+  width: 90px;
 }
 
-.youtube-url {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
+.key-scale-test button {
+  white-space: nowrap;
+}
+
+.key-scale-test .mark-line {
+  margin-top: 6px;
+}
+
+.key-scale-test .mark-line input {
+  flex: 1 1 220px;
+  width: auto;
 }
 
 .grid {
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: 10px;
+  grid-template-columns: 1fr;
+  gap: 8px;
 }
 
 .panel {
   background: #fffefa;
   border: 1px solid #ded7ca;
-  border-radius: 8px;
-  padding: 12px;
-  box-shadow: 0 6px 14px rgba(44, 39, 31, 0.06);
+  border-radius: 7px;
+  padding: 9px;
+  box-shadow: 0 4px 10px rgba(44, 39, 31, 0.05);
 }
 
 .panel.wide {
@@ -145,13 +189,13 @@ label {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 7px;
 }
 
 .panel-title h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: 13px;
 }
 
 .badge {
@@ -159,24 +203,24 @@ label {
   align-items: center;
   min-height: 23px;
   border-radius: 999px;
-  padding: 3px 8px;
+  padding: 2px 7px;
   background: #e7eef0;
   color: #25555d;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 
 .tone-readout {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin: 10px 0;
+  gap: 6px;
+  margin: 7px 0;
 }
 
 .tone-readout > div {
   border: 1px solid #e3ddd2;
-  border-radius: 8px;
-  padding: 10px;
+  border-radius: 7px;
+  padding: 8px;
   background: #fbf8f1;
 }
 
@@ -188,10 +232,10 @@ label {
 }
 
 .tone-readout strong {
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1;
   display: inline-block;
-  min-width: 96px;
+  min-width: 76px;
 }
 
 .meter {
@@ -199,7 +243,7 @@ label {
   background: #ece6da;
   border-radius: 999px;
   overflow: hidden;
-  margin-bottom: 12px;
+  margin-bottom: 9px;
 }
 
 .meter div {
@@ -216,7 +260,7 @@ label {
   flex-wrap: wrap;
   color: #687076;
   font-size: 11px;
-  margin: -6px 0 10px;
+  margin: -4px 0 8px;
 }
 
 .hint {
@@ -234,9 +278,9 @@ label {
 
 .slider-line {
   display: grid;
-  grid-template-columns: 1fr 42px;
+  grid-template-columns: 1fr 34px;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .slider-line input {
@@ -246,23 +290,43 @@ label {
 .slider-line strong {
   text-align: right;
   color: #303539;
+  font-size: 11px;
+}
+
+.control-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #303539;
+  font-weight: 600;
+}
+
+.control-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: #e7eef0;
+  color: #25555d;
+  font-size: 12px;
 }
 
 .settings-grid {
   display: grid;
-  grid-template-columns: 1fr 0.45fr 0.7fr;
-  gap: 10px;
-  margin-bottom: 10px;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .path-field {
-  grid-column: 1 / span 2;
+  grid-column: 1;
 }
 
 .path-field span {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 8px;
+  gap: 6px;
 }
 
 .checkline {
@@ -278,16 +342,20 @@ label {
 }
 
 #log {
-  min-height: 88px;
-  max-height: 120px;
+  min-height: 72px;
+  max-height: 96px;
   overflow: auto;
   margin: 0;
-  padding: 9px;
-  border-radius: 8px;
+  padding: 8px;
+  border-radius: 7px;
   background: #202529;
   color: #e7efe9;
-  font-size: 11px;
+  font-size: 10px;
   white-space: pre-wrap;
+}
+
+.settings-panel.is-hidden {
+  display: none;
 }
 
 @media (max-width: 820px) {
@@ -297,6 +365,8 @@ label {
 
   .topbar,
   .youtube-toolbar,
+  .control-grid,
+  .key-scale-test,
   .grid,
   .settings-grid {
     grid-template-columns: 1fr;

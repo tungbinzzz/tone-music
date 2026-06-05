@@ -1,16 +1,20 @@
 import json
 import sys
 import threading
+import time
 
 from audio_loopback import RealtimeAnalyzer
-from cubase_midi import list_outputs, send_control_cc, send_key_cc, send_transport
+from cubase_midi import list_inputs, list_outputs, mido, send_control_cc, send_key_cc, send_transport
 from key_detector import warmup_detector
 
 
 stdout_lock = threading.Lock()
 analyzer = None
+midi_feedback_thread = None
+midi_feedback_stop = threading.Event()
 config = {
     "midi_output_name": "",
+    "midi_input_name": "",
 }
 
 
@@ -22,6 +26,58 @@ def emit(payload: dict) -> None:
 
 def reply(request_id: int, ok: bool = True, **payload) -> None:
     emit({"id": request_id, "ok": ok, **payload})
+
+
+def stop_midi_feedback() -> None:
+    midi_feedback_stop.set()
+
+
+def start_midi_feedback(input_name: str = "") -> str:
+    global midi_feedback_thread
+
+    if mido is None:
+        raise RuntimeError("Missing dependency: mido/python-rtmidi. Install Python requirements first.")
+
+    inputs = mido.get_input_names()
+    if not inputs:
+        raise RuntimeError("No MIDI input ports found.")
+
+    if input_name:
+        if input_name not in inputs:
+            raise RuntimeError(f"MIDI feedback input not found: {input_name}. Available inputs: {', '.join(inputs)}")
+        target = input_name
+    else:
+        target = inputs[0]
+
+    if midi_feedback_thread and midi_feedback_thread.is_alive():
+        stop_midi_feedback()
+        midi_feedback_thread.join(timeout=1.0)
+
+    midi_feedback_stop.clear()
+
+    def run() -> None:
+        try:
+            with mido.open_input(target) as port:
+                emit({"type": "midi_feedback_status", "status": "listening", "midi_input_name": target})
+                while not midi_feedback_stop.is_set():
+                    for message in port.iter_pending():
+                        if message.type == "control_change":
+                            emit({
+                                "type": "midi_feedback",
+                                "channel": int(message.channel),
+                                "control": int(message.control),
+                                "value": int(message.value),
+                                "midi_input_name": target,
+                            })
+                    time.sleep(0.01)
+        except Exception as error:
+            emit({"type": "error", "message": f"MIDI feedback listener failed: {error}"})
+        finally:
+            emit({"type": "midi_feedback_status", "status": "stopped", "midi_input_name": target})
+
+    midi_feedback_thread = threading.Thread(target=run, name="midi-feedback-listener", daemon=True)
+    midi_feedback_thread.start()
+    return target
 
 
 def handle(request: dict) -> None:
@@ -41,11 +97,35 @@ def handle(request: dict) -> None:
             reply(request_id, ports=list_outputs())
             return
 
+        if command == "list_midi_inputs":
+            reply(request_id, ports=list_inputs())
+            return
+
+        if command == "start_midi_feedback":
+            input_name = payload.get("midi_input_name") or config.get("midi_input_name", "")
+            target = start_midi_feedback(input_name)
+            config["midi_input_name"] = target
+            reply(request_id, listening=True, midi_input_name=target)
+            return
+
+        if command == "stop_midi_feedback":
+            stop_midi_feedback()
+            reply(request_id, listening=False)
+            return
+
         if command == "start_analyzer":
             if analyzer is None:
                 analyzer = RealtimeAnalyzer(emit)
+            if payload.get("reset_statistics"):
+                analyzer.reset_statistics()
             analyzer.start()
             reply(request_id, running=True)
+            return
+
+        if command == "reset_analyzer_statistics":
+            if analyzer:
+                analyzer.reset_statistics()
+            reply(request_id, reset=True)
             return
 
         if command == "stop_analyzer":
@@ -70,13 +150,14 @@ def handle(request: dict) -> None:
 
         if command == "set_cubase_cc":
             output_name = payload.get("midi_output_name") or config.get("midi_output_name", "")
-            send_control_cc(payload.get("control", 0), payload.get("value", 0), output_name)
+            send_control_cc(payload.get("control", 0), payload.get("value", 0), output_name, payload.get("channel", 0))
             reply(request_id, sent=True)
             return
 
         if command == "shutdown":
             if analyzer:
                 analyzer.stop()
+            stop_midi_feedback()
             reply(request_id, stopped=True)
             raise SystemExit(0)
 

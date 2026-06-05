@@ -8,6 +8,7 @@ const DEFAULT_CONFIG = {
   cubasePath: '',
   pythonPath: process.platform === 'win32' ? 'python' : 'python3',
   midiOutputName: '',
+  midiInputName: '',
   micVolume: 90,
   cubaseVolume: 64,
   send1Level: 0,
@@ -124,6 +125,17 @@ function requestEngine(command, payload = {}) {
   });
 }
 
+function stopEngineProcess() {
+  if (!engineProcess) return true;
+  try {
+    engineProcess.kill();
+  } finally {
+    engineProcess = undefined;
+    pendingRequests.clear();
+  }
+  return true;
+}
+
 function launchCubase(cubasePath) {
   if (!cubasePath) {
     emitToRenderer('engine:log', { level: 'warn', text: 'Cubase path is not configured.' });
@@ -204,13 +216,21 @@ function openYoutubeWindow(url) {
   return true;
 }
 
+function closeYoutubeWindow() {
+  if (youtubeWindow && !youtubeWindow.isDestroyed()) {
+    youtubeWindow.close();
+    youtubeWindow = undefined;
+  }
+  return true;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 860,
-    height: 680,
-    minWidth: 760,
-    minHeight: 560,
-    backgroundColor: '#f4f1ea',
+    width: 460,
+    height: 620,
+    minWidth: 400,
+    minHeight: 500,
+    backgroundColor: '#eef1f2',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -225,7 +245,6 @@ function createWindow() {
 app.whenReady().then(() => {
   const config = loadConfig();
   createWindow();
-  startEngine();
 
   if (config.autoLaunchYoutube) openYoutubeWindow(config.youtubeUrl);
   if (config.autoLaunchCubase) launchCubase(config.cubasePath);
@@ -266,9 +285,43 @@ ipcMain.handle('app:launch-youtube', async (_event, url) => {
   return openYoutubeWindow(url || DEFAULT_CONFIG.youtubeUrl);
 });
 
+ipcMain.handle('app:close-youtube', async () => closeYoutubeWindow());
+
 ipcMain.handle('app:launch-cubase', (_event, cubasePath) => {
   launchCubase(cubasePath);
   return true;
 });
 
+ipcMain.handle('preset:export', async (_event, preset) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save ToneLink preset',
+    defaultPath: `${preset?.name || 'tonelink-preset'}.json`,
+    filters: [{ name: 'ToneLink Preset', extensions: ['json'] }]
+  });
+
+  if (result.canceled || !result.filePath) {
+    return { saved: false };
+  }
+
+  fs.writeFileSync(result.filePath, JSON.stringify(preset, null, 2), 'utf8');
+  return { saved: true, filePath: result.filePath };
+});
+
+ipcMain.handle('preset:import', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Import ToneLink preset',
+    filters: [{ name: 'ToneLink Preset', extensions: ['json'] }],
+    properties: ['openFile']
+  });
+
+  if (result.canceled || !result.filePaths[0]) {
+    return { imported: false };
+  }
+
+  const filePath = result.filePaths[0];
+  const preset = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  return { imported: true, filePath, preset };
+});
+
 ipcMain.handle('engine:request', (_event, command, payload) => requestEngine(command, payload));
+ipcMain.handle('engine:stop-process', () => stopEngineProcess());

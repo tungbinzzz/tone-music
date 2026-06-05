@@ -1,5 +1,5 @@
 param(
-  [string]$CubaseFolder = "Cubase 15"
+  [string]$CubaseFolder = "Cubase"
 )
 
 $ErrorActionPreference = "Stop"

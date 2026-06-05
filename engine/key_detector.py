@@ -5,8 +5,31 @@ import numpy as np
 
 PITCH_CLASSES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
-MAJOR_PROFILE = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
-MINOR_PROFILE = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+STABLE_SCALE_INTERVALS = {
+    "major": [0, 2, 4, 5, 7, 9, 11],
+    "minor": [0, 2, 3, 5, 7, 8, 10],
+}
+
+
+def _scale_profile(intervals: list[int]) -> np.ndarray:
+    profile = np.full(12, 0.15, dtype=np.float64)
+    for interval in intervals:
+        profile[interval] = 1.0
+
+    profile[0] = 1.45
+    if 7 in intervals:
+        profile[7] = 1.25
+    if 3 in intervals:
+        profile[3] = 1.15
+    if 4 in intervals:
+        profile[4] = 1.15
+
+    return profile
+
+
+SCALE_PROFILES = {
+    name: _scale_profile(intervals) for name, intervals in STABLE_SCALE_INTERVALS.items()
+}
 
 
 @dataclass
@@ -22,6 +45,16 @@ def _correlation(a: np.ndarray, b: np.ndarray) -> float:
     if denominator <= 1e-9:
         return 0.0
     return float(np.dot(a, b) / denominator)
+
+
+def _normalized_entropy(values: np.ndarray) -> float:
+    total = float(np.sum(values))
+    if total <= 1e-9:
+        return 0.0
+
+    probabilities = values / total
+    probabilities = probabilities[probabilities > 1e-12]
+    return float(-np.sum(probabilities * np.log(probabilities)) / np.log(12.0))
 
 
 def _fast_chroma(samples: np.ndarray, sample_rate: int) -> np.ndarray:
@@ -80,14 +113,20 @@ def detect_key(samples: np.ndarray, sample_rate: int, mode: str = "fast") -> Key
 
     scores = []
     for index, name in enumerate(PITCH_CLASSES):
-        major_score = _correlation(chroma_vector, np.roll(MAJOR_PROFILE, index))
-        minor_score = _correlation(chroma_vector, np.roll(MINOR_PROFILE, index))
-        scores.append((major_score, f"{name} major"))
-        scores.append((minor_score, f"{name} minor"))
+        for scale_name, profile in SCALE_PROFILES.items():
+            score = _correlation(chroma_vector, np.roll(profile, index))
+            scores.append((score, f"{name} {scale_name}"))
 
     scores.sort(reverse=True, key=lambda item: item[0])
     best_score, best_key = scores[0]
     second_score = scores[1][0] if len(scores) > 1 else 0.0
+
+    entropy = _normalized_entropy(chroma_vector)
+    score_gap = best_score - second_score
+    if entropy >= 0.965 and score_gap < 0.04:
+        dominant_index = int(np.argmax(chroma_vector))
+        return KeyResult(f"{PITCH_CLASSES[dominant_index]} chromatic", 0.55)
+
     confidence = max(0.0, min(1.0, (best_score - second_score + 0.25) / 0.5))
 
     return KeyResult(best_key, confidence)
