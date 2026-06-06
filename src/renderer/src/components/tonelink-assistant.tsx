@@ -278,6 +278,7 @@ export default function ToneLinkAssistant() {
   const [currentTime, setCurrentTime] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [settingsTab, setSettingsTab] = useState<'midi' | 'config'>('midi')
+  const [saveStatus, setSaveStatus] = useState('')
   const [midiOutputs, setMidiOutputs] = useState<string[]>([])
   const [midiInputs, setMidiInputs] = useState<string[]>([])
   const [midiSettings, setMidiSettings] = useState({ output: '', feedbackInput: '' })
@@ -290,6 +291,7 @@ export default function ToneLinkAssistant() {
   })
   const lastAutoSentKey = useRef('')
   const autoSendKeyRef = useRef(autoSendKey)
+  const didStartupGenericSync = useRef(false)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const nhacApp = useMemo(() => window.nhacApp ?? fallbackNhacApp, [])
   const [volumePopupOpen, setVolumePopupOpen] = useState(false)
@@ -348,8 +350,9 @@ export default function ToneLinkAssistant() {
     nhacApp.getConfig().then((config) => {
       setAutoSendKey(Boolean(config.autoSendKey))
       const feedbackInput = config.midiInputName || ''
+      const midiOutput = config.midiOutputName || ''
       setMidiSettings({
-        output: config.midiOutputName || '',
+        output: midiOutput,
         feedbackInput,
       })
       setConfigSettings({
@@ -359,7 +362,10 @@ export default function ToneLinkAssistant() {
         autoOpenYoutube: Boolean(config.autoLaunchYoutube),
         autoOpenCubase: Boolean(config.autoLaunchCubase),
       })
-      if (config.midiOutputName) setMidiOutputs([config.midiOutputName])
+      if (midiOutput) {
+        setMidiOutputs([midiOutput])
+        sendStartupGenericDefaults(midiOutput).catch(console.error)
+      }
       if (feedbackInput) {
         setMidiInputs([feedbackInput])
         nhacApp.engineRequest('start_midi_feedback', { midi_input_name: feedbackInput }).catch(console.error)
@@ -393,8 +399,8 @@ export default function ToneLinkAssistant() {
     })
   }, [nhacApp])
 
-  async function saveConfig(next = configSettings, midi = midiSettings, auto = autoSendKey) {
-    return nhacApp.saveConfig({
+  async function saveConfig(next = configSettings, midi = midiSettings, auto = autoSendKey, showSavedStatus = false) {
+    const saved = await nhacApp.saveConfig({
       youtubeUrl: next.youtubeUrl,
       pythonPath: next.pythonPath,
       cubasePath: next.cubasePath,
@@ -404,6 +410,59 @@ export default function ToneLinkAssistant() {
       midiInputName: midi.feedbackInput,
       autoSendKey: auto,
     })
+
+    setConfigSettings({
+      youtubeUrl: saved.youtubeUrl || next.youtubeUrl,
+      pythonPath: saved.pythonPath || next.pythonPath,
+      cubasePath: saved.cubasePath || next.cubasePath,
+      autoOpenYoutube: Boolean(saved.autoLaunchYoutube),
+      autoOpenCubase: Boolean(saved.autoLaunchCubase),
+    })
+    setMidiSettings({
+      output: saved.midiOutputName || midi.output,
+      feedbackInput: saved.midiInputName || midi.feedbackInput,
+    })
+    if (showSavedStatus) {
+      if (saved.midiInputName) {
+        await nhacApp.engineRequest('start_midi_feedback', { midi_input_name: saved.midiInputName })
+      }
+      if (!saved.autoLaunchYoutube) {
+        await nhacApp.closeYoutube()
+      }
+      setSaveStatus('Đã lưu cài đặt')
+    }
+    return saved
+  }
+
+  function saveConfigField<K extends keyof typeof configSettings>(key: K, value: (typeof configSettings)[K]) {
+    const next = { ...configSettings, [key]: value }
+    setSaveStatus('')
+    setConfigSettings(next)
+  }
+
+  async function sendStartupGenericDefaults(outputName: string) {
+    if (didStartupGenericSync.current || !outputName) return
+    didStartupGenericSync.current = true
+
+    setEffects({ tune: false, lofi: false, remix: false })
+    setPitchShift(0)
+
+    const startupMessages = [
+      { label: 'startup tune off', control: cc.effects.tune, value: 0 },
+      { label: 'startup lofi off', control: cc.effects.lofi, value: 0 },
+      { label: 'startup remix off', control: cc.effects.remix, value: 0 },
+      { label: 'startup tang_tong zero', control: cc.pitchShift, value: pitchDisplayToCc(0) },
+    ]
+
+    for (const message of startupMessages) {
+      await nhacApp.engineRequest('set_cubase_cc', {
+        channel: 0,
+        control: message.control,
+        value: message.value,
+        midi_output_name: outputName,
+      })
+      console.log(`Sent ${message.label}: CC${message.control}=${message.value}`)
+    }
   }
 
   async function sendMidi(label: string, control: number, value: number) {
@@ -530,7 +589,10 @@ export default function ToneLinkAssistant() {
 
   async function chooseCubasePath() {
     const filePath = await nhacApp.selectCubase()
-    if (filePath) setConfigSettings((current) => ({ ...current, cubasePath: filePath }))
+    if (filePath) {
+      setSaveStatus('')
+      setConfigSettings((current) => ({ ...current, cubasePath: filePath }))
+    }
   }
 
   async function exportPreset() {
@@ -566,31 +628,27 @@ export default function ToneLinkAssistant() {
                 <p className="text-[8px] text-muted-foreground uppercase">Tone</p>
                 <p className="text-sm font-bold font-mono text-foreground leading-tight">{toneData.tone}</p>
               </div>
-              <div className="bg-background rounded-lg px-2 py-1 border border-border min-w-[40px] text-center">
-                <p className="text-[8px] text-muted-foreground uppercase">Conf</p>
-                <p className="text-sm font-bold font-mono text-primary leading-tight">{toneData.confidence}%</p>
-              </div>
               <div className="flex gap-0.5">
                 <button
                   onClick={startToneDetection}
                   className={`p-1 rounded-md transition-all ${
                     toneData.isDetecting ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground hover:bg-primary hover:text-primary-foreground'
                   }`}
-                  title="Start Detection"
+                  title="Bắt đầu dò tone"
                 >
                   <Play className="w-3 h-3" />
                 </button>
                 <button
                   onClick={stopToneDetection}
                   className="p-1 rounded-md bg-muted text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-all"
-                  title="Stop"
+                  title="Dừng dò tone"
                 >
                   <Square className="w-3 h-3" />
                 </button>
                 <button
                   onClick={() => sendKeyScaleToCubase()}
                   className="p-1 rounded-md bg-muted text-muted-foreground hover:bg-muted/80 transition-all"
-                  title="Send Key/Scale"
+                  title="Gửi key/scale sang Cubase"
                 >
                   <Send className="w-3 h-3" />
                 </button>
@@ -609,20 +667,11 @@ export default function ToneLinkAssistant() {
             <div className="h-5 w-px bg-border" />
 
             <div className="flex items-center gap-1 shrink-0">
-              <button
-                onClick={() => setIsLive(!isLive)}
-                className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase transition-all ${
-                  isLive ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                {isLive ? 'Live' : 'Off'}
-              </button>
-
               <div className="relative">
                 <button
                   onClick={() => nhacApp.openSettingsWindow ? nhacApp.openSettingsWindow() : setShowSettings(!showSettings)}
                   className="p-1 rounded-md transition-all text-muted-foreground hover:text-foreground hover:bg-muted"
-                  title="Settings"
+                  title="Cài đặt"
                 >
                   <Settings className="w-3 h-3" />
                 </button>
@@ -662,14 +711,14 @@ export default function ToneLinkAssistant() {
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[8px] text-muted-foreground uppercase">Output</label>
+                          <label className="text-[8px] text-muted-foreground uppercase">MIDI gửi sang Cubase</label>
                           <div className="relative">
                             <select
                               value={midiSettings.output}
                               onChange={(event) => {
                                 const next = { ...midiSettings, output: event.target.value }
+                                setSaveStatus('')
                                 setMidiSettings(next)
-                                saveConfig(configSettings, next)
                               }}
                               className="w-full px-2 py-1 rounded-md bg-background border border-border text-[10px] text-foreground appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/50"
                             >
@@ -684,14 +733,14 @@ export default function ToneLinkAssistant() {
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[8px] text-muted-foreground uppercase">Feedback Input</label>
+                          <label className="text-[8px] text-muted-foreground uppercase">MIDI nhận từ Cubase</label>
                           <div className="relative">
                             <select
                               value={midiSettings.feedbackInput}
                               onChange={(event) => {
                                 const next = { ...midiSettings, feedbackInput: event.target.value }
+                                setSaveStatus('')
                                 setMidiSettings(next)
-                                startMidiFeedback(event.target.value)
                               }}
                               className="w-full px-2 py-1 rounded-md bg-background border border-border text-[10px] text-foreground appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/50"
                             >
@@ -711,7 +760,7 @@ export default function ToneLinkAssistant() {
                             Làm mới
                           </button>
                           <button onClick={() => sendMidi('Test MIDI', 23, 127)} className="px-1.5 py-1 rounded-md bg-muted text-muted-foreground hover:bg-muted/80 text-[9px] font-medium transition-all">
-                            Test CC23
+                            Test MIDI
                           </button>
                           <button onClick={exportPreset} className="px-1.5 py-1 rounded-md bg-muted text-muted-foreground hover:bg-muted/80 text-[9px] font-medium transition-all">
                             Lưu
@@ -720,6 +769,9 @@ export default function ToneLinkAssistant() {
                             Nhập
                           </button>
                         </div>
+                        <button onClick={() => saveConfig(configSettings, midiSettings, autoSendKey, true)} className="w-full mt-1 px-2 py-1 rounded-md bg-primary text-primary-foreground text-[9px] font-medium hover:bg-primary/90 transition-all">
+                          {saveStatus || 'LÆ°u cÃ i Ä‘áº·t'}
+                        </button>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -729,32 +781,15 @@ export default function ToneLinkAssistant() {
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[8px] text-muted-foreground uppercase">YouTube URL</label>
-                          <input
-                            type="text"
-                            value={configSettings.youtubeUrl}
-                            onChange={(event) => setConfigSettings((current) => ({ ...current, youtubeUrl: event.target.value }))}
-                            className="w-full px-2 py-1 rounded-md bg-background border border-border text-[10px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-[8px] text-muted-foreground uppercase">Python</label>
-                          <input
-                            type="text"
-                            value={configSettings.pythonPath}
-                            onChange={(event) => setConfigSettings((current) => ({ ...current, pythonPath: event.target.value }))}
-                            className="w-full px-2 py-1 rounded-md bg-background border border-border text-[10px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
                           <label className="text-[8px] text-muted-foreground uppercase">Cubase</label>
                           <div className="flex gap-1">
                             <input
                               type="text"
                               value={configSettings.cubasePath}
-                              onChange={(event) => setConfigSettings((current) => ({ ...current, cubasePath: event.target.value }))}
+                              onChange={(event) => {
+                                setSaveStatus('')
+                                setConfigSettings((current) => ({ ...current, cubasePath: event.target.value }))
+                              }}
                               className="flex-1 px-2 py-1 rounded-md bg-background border border-border text-[10px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
                             />
                             <button onClick={chooseCubasePath} className="px-1.5 py-1 rounded-md bg-muted text-muted-foreground hover:bg-muted/80 transition-all">
@@ -768,7 +803,9 @@ export default function ToneLinkAssistant() {
                             <input
                               type="checkbox"
                               checked={configSettings.autoOpenYoutube}
-                              onChange={() => setConfigSettings((current) => ({ ...current, autoOpenYoutube: !current.autoOpenYoutube }))}
+                              onChange={(event) => {
+                                saveConfigField('autoOpenYoutube', event.target.checked)
+                              }}
                               className="accent-primary"
                             />
                             <span className="text-[9px] text-foreground">Tự mở YouTube khi bật app</span>
@@ -778,25 +815,30 @@ export default function ToneLinkAssistant() {
                             <input
                               type="checkbox"
                               checked={configSettings.autoOpenCubase}
-                              onChange={() => setConfigSettings((current) => ({ ...current, autoOpenCubase: !current.autoOpenCubase }))}
+                              onChange={(event) => {
+                                saveConfigField('autoOpenCubase', event.target.checked)
+                              }}
                               className="accent-primary"
                             />
                             <span className="text-[9px] text-foreground">Tự mở Cubase chạy nền khi bật app</span>
                           </label>
                         </div>
 
-                        <button onClick={() => saveConfig()} className="w-full mt-1 px-2 py-1 rounded-md bg-primary text-primary-foreground text-[9px] font-medium hover:bg-primary/90 transition-all">
-                          Lưu cấu hình
+                        <button onClick={() => saveConfig(configSettings, midiSettings, autoSendKey, true)} className="w-full mt-1 px-2 py-1 rounded-md bg-primary text-primary-foreground text-[9px] font-medium hover:bg-primary/90 transition-all">
+                          {saveStatus || 'Lưu cài đặt'}
                         </button>
+                        <p className="text-[8px] text-muted-foreground text-center">
+                          Tắt YouTube ở đây sẽ áp dụng cho lần mở app tiếp theo.
+                        </p>
                       </div>
                     )}
                   </div>
                   <div className="w-2 h-2 bg-card border-b border-r border-border rotate-45 absolute right-3 -bottom-1" />
                 </div>
               </div>
-              <button onClick={() => nhacApp.launchCubase(configSettings.cubasePath)} className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-primary text-primary-foreground text-[9px] font-medium hover:bg-primary/90 transition-all">
+              <button onClick={() => nhacApp.launchYoutube(configSettings.youtubeUrl)} className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-primary text-primary-foreground text-[9px] font-medium hover:bg-primary/90 transition-all">
                 <ExternalLink className="w-2.5 h-2.5" />
-                <span>Cubase</span>
+                <span>YouTube</span>
               </button>
             </div>
           </div>

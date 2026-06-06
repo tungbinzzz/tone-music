@@ -272,10 +272,10 @@ function openSettingsWindow() {
   }
 
   settingsWindow = new BrowserWindow({
-    width: 340,
-    height: 390,
-    minWidth: 320,
-    minHeight: 340,
+    width: 320,
+    height: 330,
+    minWidth: 300,
+    minHeight: 300,
     title: 'ToneLink Settings',
     backgroundColor: '#101317',
     autoHideMenuBar: true,
