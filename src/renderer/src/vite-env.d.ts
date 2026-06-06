@@ -52,9 +52,9 @@ declare global {
       setMainWindowSize: (width: number, height: number) => Promise<boolean>
       engineRequest: (command: string, payload?: Record<string, unknown>) => Promise<EngineResponse>
       stopEngineProcess: () => Promise<boolean>
-      onYoutubeVideoSelected: (callback: (payload: { videoId: string; url: string }) => void) => void
-      onEngineEvent: (callback: (payload: EngineEvent) => void) => void
-      onEngineLog: (callback: (payload: { level?: string; text: string }) => void) => void
+      onYoutubeVideoSelected: (callback: (payload: { videoId: string; url: string }) => void) => void | (() => void)
+      onEngineEvent: (callback: (payload: EngineEvent) => void) => void | (() => void)
+      onEngineLog: (callback: (payload: { level?: string; text: string }) => void) => void | (() => void)
     }
   }
 }

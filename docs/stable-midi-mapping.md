@@ -59,6 +59,7 @@ Generic Remote, one-way:
 - `CC27`: Tune
 - `CC25`: Lofi
 - `CC22`: Remix
+- `CC6`: Return Speed
 - `CC17`: Key
 - `CC18`: Scale
 - `CC7`: Tang tong

@@ -14,7 +14,19 @@ contextBridge.exposeInMainWorld('nhacApp', {
   setMainWindowSize: (width, height) => ipcRenderer.invoke('window:set-main-size', width, height),
   engineRequest: (command, payload) => ipcRenderer.invoke('engine:request', command, payload),
   stopEngineProcess: () => ipcRenderer.invoke('engine:stop-process'),
-  onYoutubeVideoSelected: (callback) => ipcRenderer.on('youtube:video-selected', (_event, payload) => callback(payload)),
-  onEngineEvent: (callback) => ipcRenderer.on('engine:event', (_event, payload) => callback(payload)),
-  onEngineLog: (callback) => ipcRenderer.on('engine:log', (_event, payload) => callback(payload))
+  onYoutubeVideoSelected: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('youtube:video-selected', listener);
+    return () => ipcRenderer.removeListener('youtube:video-selected', listener);
+  },
+  onEngineEvent: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('engine:event', listener);
+    return () => ipcRenderer.removeListener('engine:event', listener);
+  },
+  onEngineLog: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('engine:log', listener);
+    return () => ipcRenderer.removeListener('engine:log', listener);
+  }
 });

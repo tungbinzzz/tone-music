@@ -11,7 +11,7 @@
 <ctrl><name>volumbeat</name><stat>176</stat><chan>0</chan><addr>2</addr><max>127</max><flags>1</flags></ctrl>
 <ctrl><name>volummic</name><stat>176</stat><chan>0</chan><addr>3</addr><max>127</max><flags>1</flags></ctrl>
 <ctrl><name>volumvang</name><stat>176</stat><chan>0</chan><addr>5</addr><max>127</max><flags>1</flags></ctrl>
-<ctrl><name>volumtune</name><stat>176</stat><chan>0</chan><addr>6</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>return_speed</name><stat>176</stat><chan>0</chan><addr>6</addr><max>127</max><flags>1</flags></ctrl>
 <ctrl><name>tang_tong</name><stat>176</stat><chan>0</chan><addr>7</addr><max>48</max><flags>1</flags></ctrl>
 <ctrl><name>volum_vang_ngan</name><stat>176</stat><chan>0</chan><addr>8</addr><max>127</max><flags>1</flags></ctrl>
 <ctrl><name>delay</name><stat>176</stat><chan>0</chan><addr>9</addr><max>127</max><flags>1</flags></ctrl>
@@ -53,7 +53,7 @@
 <entry ctrl="volumvang">
 <value><device>VST Mixer</device><chan>1</chan><name>sends/slot1:volume</name><flags>0</flags></value>
 </entry>
-<entry ctrl="volumtune">
+<entry ctrl="return_speed">
 <value><device>VST Mixer</device><chan>1</chan><name>inserts/slot1:param4</name><flags>0</flags></value>
 </entry>
 <entry ctrl="tang_tong">
