@@ -5,5 +5,7 @@ __pycache__/
 *.log
 dist/
 build/
+release/
+release-fixed/
 *.egg-info/
 app-config.json

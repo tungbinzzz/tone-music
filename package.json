@@ -7,8 +7,55 @@
     "start": "node scripts/dev.js",
     "dev": "node scripts/dev.js",
     "build": "vite build",
+    "build:engine": "node scripts/build-engine.js",
+    "clean:release": "node scripts/clean-release.js",
+    "dist:win": "npm run clean:release && npm run build && npm run build:engine && electron-builder --win",
+    "pack:win": "npm run clean:release && npm run build && npm run build:engine && electron-builder --win --dir",
     "electron": "electron .",
     "install:cubase-remote": "powershell -ExecutionPolicy Bypass -File scripts/install-cubase-midi-remote.ps1"
+  },
+  "build": {
+    "appId": "com.tonelink.app",
+    "productName": "ToneLink",
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "release-fixed"
+    },
+    "files": [
+      "package.json",
+      "src/main/**/*",
+      "dist/renderer/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "dist/engine/tonelink-engine.exe",
+        "to": "engine/tonelink-engine.exe"
+      },
+      {
+        "from": "generic_remote",
+        "to": "generic_remote"
+      },
+      {
+        "from": "cubase_remote",
+        "to": "cubase_remote"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
+    }
   },
   "keywords": [
     "electron",
@@ -32,6 +79,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "electron": "^31.7.7",
+    "electron-builder": "^26.15.0",
     "tailwindcss": "^4.2.0",
     "typescript": "5.7.3",
     "vite": "^7.2.7"

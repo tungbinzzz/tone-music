@@ -78,12 +78,48 @@ function resolveEnginePath() {
   return path.join(app.getAppPath(), 'engine', 'app.py');
 }
 
+function resolvePackagedEnginePath() {
+  return process.platform === 'win32'
+    ? path.join(process.resourcesPath, 'engine', 'tonelink-engine.exe')
+    : path.join(process.resourcesPath, 'engine', 'tonelink-engine');
+}
+
+function getEngineLaunchConfig(config) {
+  if (app.isPackaged) {
+    const enginePath = resolvePackagedEnginePath();
+    if (!fs.existsSync(enginePath)) {
+      throw new Error(`Packaged engine not found: ${enginePath}`);
+    }
+
+    return {
+      command: enginePath,
+      args: [],
+      cwd: process.resourcesPath
+    };
+  }
+
+  return {
+    command: config.pythonPath,
+    args: [resolveEnginePath()],
+    cwd: app.getAppPath()
+  };
+}
+
 function startEngine() {
   if (engineProcess) return;
 
   const config = loadConfig();
-  engineProcess = spawn(config.pythonPath, [resolveEnginePath()], {
-    cwd: app.getAppPath(),
+  let launchConfig;
+
+  try {
+    launchConfig = getEngineLaunchConfig(config);
+  } catch (error) {
+    emitToRenderer('engine:log', { level: 'error', text: error.message });
+    throw error;
+  }
+
+  engineProcess = spawn(launchConfig.command, launchConfig.args, {
+    cwd: launchConfig.cwd,
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true
   });
