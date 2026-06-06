@@ -52,6 +52,29 @@ def list_inputs() -> list[str]:
     return mido.get_input_names()
 
 
+def resolve_port_name(requested_name: str, available_ports: list[str]) -> str:
+    if not available_ports:
+        raise RuntimeError("No MIDI ports found.")
+
+    requested = (requested_name or "").strip()
+    if not requested:
+      return available_ports[0]
+
+    if requested in available_ports:
+        return requested
+
+    requested_lower = requested.lower()
+    for port_name in available_ports:
+        if requested_lower in port_name.lower():
+            return port_name
+
+    for port_name in available_ports:
+        if port_name.lower() in requested_lower:
+            return port_name
+
+    return available_ports[0]
+
+
 def send_transport(action: str, output_name: str = "") -> None:
     if mido is None:
         raise RuntimeError("Missing dependency: mido/python-rtmidi. Install Python requirements first.")
@@ -59,10 +82,7 @@ def send_transport(action: str, output_name: str = "") -> None:
         raise ValueError(f"Unsupported Cubase transport action: {action}")
 
     outputs = mido.get_output_names()
-    if not outputs:
-        raise RuntimeError("No MIDI output ports found.")
-
-    target = output_name if output_name in outputs else outputs[0]
+    target = resolve_port_name(output_name, outputs)
     control = TRANSPORT_CC[action]
 
     with mido.open_output(target) as port:
@@ -76,10 +96,7 @@ def send_key_cc(key_name: str, output_name: str = "", channel: int = 0, control:
         raise ValueError(f"Unsupported key name: {key_name}")
 
     outputs = mido.get_output_names()
-    if not outputs:
-        raise RuntimeError("No MIDI output ports found.")
-
-    target = output_name if output_name in outputs else outputs[0]
+    target = resolve_port_name(output_name, outputs)
     value = KEY_VALUES[key_name]
 
     with mido.open_output(target) as port:
@@ -91,10 +108,7 @@ def send_control_cc(control: int, value: int, output_name: str = "", channel: in
         raise RuntimeError("Missing dependency: mido/python-rtmidi. Install Python requirements first.")
 
     outputs = mido.get_output_names()
-    if not outputs:
-        raise RuntimeError("No MIDI output ports found.")
-
-    target = output_name if output_name in outputs else outputs[0]
+    target = resolve_port_name(output_name, outputs)
     safe_control = max(0, min(127, int(control)))
     safe_value = max(0, min(127, int(value)))
     safe_channel = max(0, min(15, int(channel)))

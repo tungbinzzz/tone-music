@@ -7,8 +7,8 @@ const DEFAULT_CONFIG = {
   youtubeUrl: 'https://www.youtube.com',
   cubasePath: '',
   pythonPath: process.platform === 'win32' ? 'python' : 'python3',
-  midiOutputName: '',
-  midiInputName: '',
+  midiOutputName: 'ToneLink To Cubase',
+  midiInputName: 'ToneLink From Cubase',
   micVolume: 90,
   cubaseVolume: 64,
   send1Level: 0,
@@ -19,6 +19,7 @@ const DEFAULT_CONFIG = {
 
 let mainWindow;
 let youtubeWindow;
+let settingsWindow;
 let engineProcess;
 let nextRequestId = 1;
 const pendingRequests = new Map();
@@ -38,19 +39,33 @@ function getDefaultConfig() {
   };
 }
 
-function loadConfig() {
+function normalizeConfig(config) {
   const defaults = getDefaultConfig();
+  const configuredPython = config.pythonPath || defaults.pythonPath;
+  const pythonPath = configuredPython === DEFAULT_CONFIG.pythonPath ? defaults.pythonPath : configuredPython;
+
+  return {
+    ...defaults,
+    ...config,
+    midiOutputName: config.midiOutputName || defaults.midiOutputName,
+    midiInputName: config.midiInputName || defaults.midiInputName,
+    pythonPath,
+    youtubeUrl: config.youtubeUrl || defaults.youtubeUrl
+  };
+}
+
+function loadConfig() {
   try {
     const raw = fs.readFileSync(getConfigPath(), 'utf8');
-    return { ...defaults, ...JSON.parse(raw) };
+    return normalizeConfig(JSON.parse(raw));
   } catch {
-    return { ...defaults };
+    return normalizeConfig({});
   }
 }
 
 function saveConfig(config) {
   fs.mkdirSync(app.getPath('userData'), { recursive: true });
-  fs.writeFileSync(getConfigPath(), JSON.stringify({ ...getDefaultConfig(), ...config }, null, 2));
+  fs.writeFileSync(getConfigPath(), JSON.stringify(normalizeConfig(config), null, 2));
 }
 
 function emitToRenderer(channel, payload) {
@@ -193,6 +208,8 @@ function openYoutubeWindow(url) {
     minHeight: 420,
     title: 'YouTube - Cubase Tone Assistant',
     backgroundColor: '#111111',
+    autoHideMenuBar: true,
+    frame: false,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -208,6 +225,20 @@ function openYoutubeWindow(url) {
   youtubeWindow.webContents.on('did-navigate', (_event, nextUrl) => handleYoutubeUrl(nextUrl));
   youtubeWindow.webContents.on('did-navigate-in-page', (_event, nextUrl) => handleYoutubeUrl(nextUrl));
   youtubeWindow.webContents.on('did-finish-load', () => handleYoutubeUrl(youtubeWindow.webContents.getURL()));
+  youtubeWindow.webContents.on('dom-ready', () => {
+    youtubeWindow.webContents.insertCSS(`
+      html::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 28px;
+        z-index: 2147483647;
+        -webkit-app-region: drag;
+      }
+    `).catch(() => {});
+  });
   youtubeWindow.on('closed', () => {
     youtubeWindow = undefined;
   });
@@ -224,12 +255,53 @@ function closeYoutubeWindow() {
   return true;
 }
 
+function loadRendererWindow(windowRef, query = '') {
+  if (process.env.VITE_DEV_SERVER_URL) {
+    windowRef.loadURL(`${process.env.VITE_DEV_SERVER_URL}${query}`);
+  } else {
+    const search = query.startsWith('?') ? query.slice(1) : query;
+    const queryObject = Object.fromEntries(new URLSearchParams(search));
+    windowRef.loadFile(path.join(app.getAppPath(), 'dist', 'renderer', 'index.html'), { query: queryObject });
+  }
+}
+
+function openSettingsWindow() {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.focus();
+    return true;
+  }
+
+  settingsWindow = new BrowserWindow({
+    width: 340,
+    height: 390,
+    minWidth: 320,
+    minHeight: 340,
+    title: 'ToneLink Settings',
+    backgroundColor: '#101317',
+    autoHideMenuBar: true,
+    frame: false,
+    resizable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false
+    }
+  });
+  settingsWindow.setMenuBarVisibility(false);
+  settingsWindow.on('closed', () => {
+    settingsWindow = undefined;
+  });
+  loadRendererWindow(settingsWindow, '?view=settings');
+  return true;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 640,
-    height: 180,
-    minWidth: 600,
-    minHeight: 160,
+    width: 620,
+    height: 120,
+    minWidth: 1,
+    minHeight: 1,
     backgroundColor: '#00000000',
     autoHideMenuBar: true,
     frame: false,
@@ -244,11 +316,7 @@ function createWindow() {
   });
   mainWindow.setMenuBarVisibility(false);
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-  } else {
-    mainWindow.loadFile(path.join(app.getAppPath(), 'dist', 'renderer', 'index.html'));
-  }
+  loadRendererWindow(mainWindow);
 }
 
 app.whenReady().then(() => {
@@ -276,7 +344,7 @@ app.on('before-quit', () => {
 
 ipcMain.handle('config:get', () => loadConfig());
 ipcMain.handle('config:save', (_event, config) => {
-  const nextConfig = { ...getDefaultConfig(), ...config };
+  const nextConfig = normalizeConfig(config);
   saveConfig(nextConfig);
   return nextConfig;
 });
@@ -332,5 +400,21 @@ ipcMain.handle('preset:import', async () => {
   return { imported: true, filePath, preset };
 });
 
+ipcMain.handle('settings:open', () => openSettingsWindow());
+ipcMain.handle('window:close-current', (event) => {
+  const currentWindow = BrowserWindow.fromWebContents(event.sender);
+  if (currentWindow && !currentWindow.isDestroyed()) {
+    currentWindow.close();
+    return true;
+  }
+  return false;
+});
+ipcMain.handle('window:set-main-size', (_event, width, height) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  const nextWidth = Math.max(1, Math.ceil(Number(width) || 1));
+  const nextHeight = Math.max(1, Math.ceil(Number(height) || 1));
+  mainWindow.setContentSize(nextWidth, nextHeight);
+  return true;
+});
 ipcMain.handle('engine:request', (_event, command, payload) => requestEngine(command, payload));
 ipcMain.handle('engine:stop-process', () => stopEngineProcess());

@@ -4,7 +4,7 @@ import threading
 import time
 
 from audio_loopback import RealtimeAnalyzer
-from cubase_midi import list_inputs, list_outputs, mido, send_control_cc, send_key_cc, send_transport
+from cubase_midi import list_inputs, list_outputs, mido, resolve_port_name, send_control_cc, send_key_cc, send_transport
 from key_detector import warmup_detector
 
 
@@ -42,12 +42,7 @@ def start_midi_feedback(input_name: str = "") -> str:
     if not inputs:
         raise RuntimeError("No MIDI input ports found.")
 
-    if input_name:
-        if input_name not in inputs:
-            raise RuntimeError(f"MIDI feedback input not found: {input_name}. Available inputs: {', '.join(inputs)}")
-        target = input_name
-    else:
-        target = inputs[0]
+    target = resolve_port_name(input_name, inputs)
 
     if midi_feedback_thread and midi_feedback_thread.is_alive():
         stop_midi_feedback()

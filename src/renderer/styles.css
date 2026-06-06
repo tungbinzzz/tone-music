@@ -95,9 +95,7 @@
   html,
   body,
   #root {
-    width: fit-content;
-    min-width: 100%;
-    height: fit-content;
+    width: 100%;
     min-height: 100%;
   }
 
@@ -111,6 +109,10 @@
 
 .drag-region {
   -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
 }
 
 button,

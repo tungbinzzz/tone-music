@@ -7,6 +7,22 @@ const devUrl = 'http://127.0.0.1:5173';
 const isWindows = process.platform === 'win32';
 const bin = (name) => path.join(root, 'node_modules', '.bin', `${name}${isWindows ? '.cmd' : ''}`);
 
+function probeServer(url) {
+  return new Promise((resolve) => {
+    const request = http.get(url, (response) => {
+      response.resume();
+      resolve(true);
+    });
+
+    request.setTimeout(1000, () => {
+      request.destroy();
+      resolve(false);
+    });
+
+    request.on('error', () => resolve(false));
+  });
+}
+
 function waitForServer(url, timeoutMs = 30000) {
   const started = Date.now();
 
@@ -30,39 +46,52 @@ function waitForServer(url, timeoutMs = 30000) {
   });
 }
 
-const vite = spawn(bin('vite'), ['--host', '127.0.0.1'], {
-  cwd: root,
-  stdio: 'inherit',
-  shell: isWindows,
-});
-
+let vite;
 let electron;
 
-waitForServer(devUrl)
-  .then(() => {
-    electron = spawn(bin('electron'), ['.'], {
+async function start() {
+  const serverAlreadyRunning = await probeServer(devUrl);
+
+  if (!serverAlreadyRunning) {
+    vite = spawn(bin('vite'), ['--host', '127.0.0.1'], {
       cwd: root,
       stdio: 'inherit',
       shell: isWindows,
-      env: {
-        ...process.env,
-        VITE_DEV_SERVER_URL: devUrl,
-      },
     });
 
-    electron.on('exit', (code) => {
-      vite.kill();
-      process.exit(code ?? 0);
+    vite.on('exit', (code) => {
+      if (!electron) process.exit(code ?? 0);
     });
-  })
-  .catch((error) => {
-    console.error(error.message);
-    vite.kill();
-    process.exit(1);
+
+    await waitForServer(devUrl);
+  } else {
+    console.log(`Using existing Vite dev server at ${devUrl}`);
+  }
+
+  electron = spawn(bin('electron'), ['.'], {
+    cwd: root,
+    stdio: 'inherit',
+    shell: isWindows,
+    env: {
+      ...process.env,
+      VITE_DEV_SERVER_URL: devUrl,
+    },
   });
+
+  electron.on('exit', (code) => {
+    if (vite) vite.kill();
+    process.exit(code ?? 0);
+  });
+}
+
+start().catch((error) => {
+    console.error(error.message);
+    if (vite) vite.kill();
+    process.exit(1);
+});
 
 process.on('SIGINT', () => {
   if (electron) electron.kill();
-  vite.kill();
+  if (vite) vite.kill();
   process.exit(0);
 });

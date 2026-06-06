@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Settings,
   ExternalLink,
@@ -16,6 +16,8 @@ import {
   RefreshCw,
   FolderOpen,
   ChevronDown,
+  Minus,
+  Plus,
 } from 'lucide-react'
 
 const KEY_TO_INDEX: Record<string, number> = {
@@ -48,6 +50,13 @@ type ControlKey = 'beat' | 'mic' | 'vang'
 type VolumeKey = 'beat' | 'mic' | 'vang' | 'vangNgan' | 'delay'
 type EffectKey = 'tune' | 'lofi' | 'remix'
 
+const PITCH_CC_MIN = 0
+const PITCH_CC_MAX = 48
+const PITCH_DISPLAY_MIN = -6
+const PITCH_DISPLAY_MAX = 6
+const PITCH_CC_CENTER = 24
+const PITCH_CC_STEP = 2
+
 type EngineEvent = {
   key?: string
   confidence?: number
@@ -56,23 +65,85 @@ type EngineEvent = {
   min_key_votes?: number
 }
 
+const fallbackNhacApp: Window['nhacApp'] = {
+  getConfig: async () => ({}),
+  saveConfig: async (config) => config,
+  selectCubase: async () => '',
+  launchYoutube: async () => false,
+  closeYoutube: async () => false,
+  launchCubase: async () => false,
+  exportPreset: async () => ({ saved: false }),
+  importPreset: async () => ({ imported: false }),
+  openSettingsWindow: async () => false,
+  closeCurrentWindow: async () => false,
+  setMainWindowSize: async () => false,
+  engineRequest: async (command) => {
+    if (command === 'list_midi_outputs' || command === 'list_midi_inputs') return { ports: [] }
+    return {}
+  },
+  stopEngineProcess: async () => false,
+  onYoutubeVideoSelected: () => {},
+  onEngineEvent: () => {},
+  onEngineLog: () => {},
+}
+
 type VolumeControlProps = {
   value: number
   onChange: (value: number) => void
   icon: React.ReactNode
   label: string
   max?: number
+  onPopupChange?: (isOpen: boolean) => void
 }
 
-function VolumeControl({ value, onChange, icon, label, max = 127 }: VolumeControlProps) {
+function formatCubaseDb(value: number, max = 127) {
+  if (value <= 0) return '-inf dB'
+
+  const normalized = Math.min(value / max, 1)
+  const gain = normalized * 2
+  const db = Math.min(20 * Math.log10(gain), 6.02)
+
+  if (db > -0.005 && db < 0.005) return '0.00 dB'
+  return `${db > 0 ? '+' : ''}${db.toFixed(2)} dB`
+}
+
+function clampMidiValue(value: number, max = 127) {
+  if (!Number.isFinite(value)) return 0
+  return Math.min(Math.max(Math.round(value), 0), max)
+}
+
+function pitchDisplayToCc(value: number) {
+  const safeValue = Math.min(Math.max(Math.round(value), PITCH_DISPLAY_MIN), PITCH_DISPLAY_MAX)
+  return Math.min(Math.max(PITCH_CC_CENTER + safeValue * PITCH_CC_STEP, PITCH_CC_MIN), PITCH_CC_MAX)
+}
+
+function pitchCcToDisplay(value: number) {
+  const safeValue = clampMidiValue(value, PITCH_CC_MAX)
+  return Math.min(Math.max(Math.round((safeValue - PITCH_CC_CENTER) / PITCH_CC_STEP), PITCH_DISPLAY_MIN), PITCH_DISPLAY_MAX)
+}
+
+function VolumeControl({ value, onChange, icon, label, max = 127, onPopupChange }: VolumeControlProps) {
   const [isOpen, setIsOpen] = useState(false)
   const percentage = (value / max) * 100
+  const cubaseDb = formatCubaseDb(value, max)
+
+  const setPopupOpen = (nextOpen: boolean) => {
+    setIsOpen((current) => {
+      if (current === nextOpen) return current
+      onPopupChange?.(nextOpen)
+      return nextOpen
+    })
+  }
+
+  const openPopup = () => {
+    setPopupOpen(true)
+  }
 
   return (
     <div
       className="relative"
-      onMouseEnter={() => setIsOpen(true)}
-      onMouseLeave={() => setIsOpen(false)}
+      onMouseEnter={openPopup}
+      onMouseLeave={() => setPopupOpen(false)}
     >
       <button
         className={`p-1.5 rounded-md transition-all duration-200 ${
@@ -83,15 +154,24 @@ function VolumeControl({ value, onChange, icon, label, max = 127 }: VolumeContro
         {icon}
       </button>
 
+      {isOpen && (
+        <div
+          aria-hidden="true"
+          onMouseEnter={openPopup}
+          className="absolute top-full left-1/2 z-40 h-2 w-[128px] -translate-x-1/2"
+        />
+      )}
+
       <div
-        className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 transition-all duration-200 z-50 ${
+        onMouseEnter={openPopup}
+        className={`no-drag absolute top-full left-1/2 -translate-x-1/2 mt-1 transition-all duration-200 z-50 ${
           isOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible translate-y-2'
         }`}
       >
         <div className="bg-card border border-border rounded-lg p-2 shadow-xl shadow-black/20 min-w-[120px]">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[9px] text-muted-foreground uppercase tracking-wider">{label}</span>
-            <span className="text-[10px] font-mono text-primary">{value}</span>
+            <span className="text-[10px] font-mono text-primary">{cubaseDb}</span>
           </div>
           <div className="relative h-1 bg-muted rounded-full overflow-hidden">
             <div
@@ -108,8 +188,43 @@ function VolumeControl({ value, onChange, icon, label, max = 127 }: VolumeContro
             className="w-full mt-1 h-1 opacity-0 cursor-pointer absolute inset-x-0 bottom-2"
           />
         </div>
-        <div className="w-2 h-2 bg-card border-b border-r border-border rotate-45 absolute left-1/2 -translate-x-1/2 -bottom-1" />
+        <div className="w-2 h-2 bg-card border-t border-l border-border rotate-45 absolute left-1/2 -translate-x-1/2 -top-1 pointer-events-none" />
       </div>
+    </div>
+  )
+}
+
+function PitchShiftControl({
+  value,
+  onChange,
+}: {
+  value: number
+  onChange: (value: number) => void
+}) {
+  const canDecrease = value > PITCH_DISPLAY_MIN
+  const canIncrease = value < PITCH_DISPLAY_MAX
+
+  return (
+    <div className="no-drag flex items-center gap-0.5 rounded-md bg-background border border-border px-1 py-0.5">
+      <button
+        onClick={() => canDecrease && onChange(value - 1)}
+        disabled={!canDecrease}
+        className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+        title="Giảm tông"
+      >
+        <Minus className="h-3 w-3" />
+      </button>
+      <div className="min-w-[34px] text-center font-mono text-[11px] font-bold text-primary">
+        {value > 0 ? `+${value}` : value}
+      </div>
+      <button
+        onClick={() => canIncrease && onChange(value + 1)}
+        disabled={!canIncrease}
+        className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+        title="Tăng tông"
+      >
+        <Plus className="h-3 w-3" />
+      </button>
     </div>
   )
 }
@@ -157,6 +272,7 @@ export default function ToneLinkAssistant() {
   const [controls, setControls] = useState({ beat: false, mic: false, vang: true })
   const [volumes, setVolumes] = useState({ beat: 90, mic: 90, vang: 55, vangNgan: 45, delay: 35 })
   const [effects, setEffects] = useState({ tune: false, lofi: false, remix: false })
+  const [pitchShift, setPitchShift] = useState(0)
   const [autoSendKey, setAutoSendKey] = useState(false)
   const [isLive, setIsLive] = useState(false)
   const [currentTime, setCurrentTime] = useState('')
@@ -174,12 +290,20 @@ export default function ToneLinkAssistant() {
   })
   const lastAutoSentKey = useRef('')
   const autoSendKeyRef = useRef(autoSendKey)
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  const nhacApp = useMemo(() => window.nhacApp ?? fallbackNhacApp, [])
+  const [volumePopupOpen, setVolumePopupOpen] = useState(false)
+
+  const handleVolumePopupChange = useCallback((nextOpen: boolean) => {
+    setVolumePopupOpen(nextOpen)
+  }, [])
 
   const cc = useMemo(
     () => ({
       controls: { beat: 40, mic: 41, vang: 42 },
       volumes: { beat: 50, mic: 51, vang: 52, vangNgan: 53, delay: 54 },
       effects: { tune: 27, lofi: 25, remix: 22 },
+      pitchShift: 7,
     }),
     [],
   )
@@ -196,11 +320,37 @@ export default function ToneLinkAssistant() {
   }, [autoSendKey])
 
   useEffect(() => {
-    window.nhacApp.getConfig().then((config) => {
+    const resizeWindow = () => {
+      const toolbar = toolbarRef.current
+      if (!toolbar || !nhacApp.setMainWindowSize) return
+
+      const rect = toolbar.getBoundingClientRect()
+      const windowPadding = 12
+      const popupSpace = volumePopupOpen ? 76 : 0
+      nhacApp.setMainWindowSize(
+        Math.ceil(rect.width + windowPadding),
+        Math.ceil(rect.height + popupSpace + windowPadding),
+      ).catch(() => {})
+    }
+
+    resizeWindow()
+    const observer = new ResizeObserver(resizeWindow)
+    if (toolbarRef.current) observer.observe(toolbarRef.current)
+    window.addEventListener('resize', resizeWindow)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', resizeWindow)
+    }
+  }, [nhacApp, volumePopupOpen])
+
+  useEffect(() => {
+    nhacApp.getConfig().then((config) => {
       setAutoSendKey(Boolean(config.autoSendKey))
+      const feedbackInput = config.midiInputName || ''
       setMidiSettings({
         output: config.midiOutputName || '',
-        feedbackInput: config.midiInputName || '',
+        feedbackInput,
       })
       setConfigSettings({
         youtubeUrl: config.youtubeUrl || 'https://www.youtube.com',
@@ -210,10 +360,13 @@ export default function ToneLinkAssistant() {
         autoOpenCubase: Boolean(config.autoLaunchCubase),
       })
       if (config.midiOutputName) setMidiOutputs([config.midiOutputName])
-      if (config.midiInputName) setMidiInputs([config.midiInputName])
+      if (feedbackInput) {
+        setMidiInputs([feedbackInput])
+        nhacApp.engineRequest('start_midi_feedback', { midi_input_name: feedbackInput }).catch(console.error)
+      }
     })
 
-    window.nhacApp.onEngineEvent((event) => {
+    nhacApp.onEngineEvent((event) => {
       if (event.type === 'tone') {
         const confidence = Math.round((event.confidence || 0) * 100)
         const nextTone = event.key || '--'
@@ -238,10 +391,10 @@ export default function ToneLinkAssistant() {
         applyMidiFeedback(Number(event.control), Number(event.value))
       }
     })
-  }, [])
+  }, [nhacApp])
 
   async function saveConfig(next = configSettings, midi = midiSettings, auto = autoSendKey) {
-    return window.nhacApp.saveConfig({
+    return nhacApp.saveConfig({
       youtubeUrl: next.youtubeUrl,
       pythonPath: next.pythonPath,
       cubasePath: next.cubasePath,
@@ -255,7 +408,7 @@ export default function ToneLinkAssistant() {
 
   async function sendMidi(label: string, control: number, value: number) {
     const saved = await saveConfig()
-    await window.nhacApp.engineRequest('set_cubase_cc', {
+    await nhacApp.engineRequest('set_cubase_cc', {
       channel: 0,
       control,
       value,
@@ -281,10 +434,16 @@ export default function ToneLinkAssistant() {
     await sendMidi(key, cc.volumes[key], value)
   }
 
+  async function updatePitchShift(value: number) {
+    const nextValue = Math.min(Math.max(Math.round(value), PITCH_DISPLAY_MIN), PITCH_DISPLAY_MAX)
+    setPitchShift(nextValue)
+    await sendMidi('tang_tong', cc.pitchShift, pitchDisplayToCc(nextValue))
+  }
+
   async function refreshMidiPorts() {
     const [outputs, inputs] = await Promise.all([
-      window.nhacApp.engineRequest('list_midi_outputs'),
-      window.nhacApp.engineRequest('list_midi_inputs'),
+      nhacApp.engineRequest('list_midi_outputs'),
+      nhacApp.engineRequest('list_midi_inputs'),
     ])
     setMidiOutputs(outputs.ports || [])
     setMidiInputs(inputs.ports || [])
@@ -297,21 +456,20 @@ export default function ToneLinkAssistant() {
   async function startMidiFeedback(inputName = midiSettings.feedbackInput) {
     if (!inputName) return
     await saveConfig(configSettings, { ...midiSettings, feedbackInput: inputName })
-    await window.nhacApp.engineRequest('start_midi_feedback', { midi_input_name: inputName })
+    await nhacApp.engineRequest('start_midi_feedback', { midi_input_name: inputName })
   }
 
   async function startToneDetection() {
     const saved = await saveConfig()
-    await window.nhacApp.engineRequest('configure', { midi_output_name: saved.midiOutputName })
-    await window.nhacApp.engineRequest('start_analyzer', { reset_statistics: true })
+    await nhacApp.engineRequest('configure', { midi_output_name: saved.midiOutputName })
+    await nhacApp.engineRequest('start_analyzer', { reset_statistics: true })
     setToneData({ tone: '--', confidence: 0, isDetecting: true })
     setIsLive(true)
     lastAutoSentKey.current = ''
   }
 
   async function stopToneDetection() {
-    await window.nhacApp.engineRequest('stop_analyzer')
-    await window.nhacApp.stopEngineProcess()
+    await nhacApp.engineRequest('stop_analyzer')
     setToneData({ tone: '--', confidence: 0, isDetecting: false })
     setIsLive(false)
   }
@@ -330,13 +488,13 @@ export default function ToneLinkAssistant() {
     if (!keyName || keyName === '--') return
     const values = getKeyScaleCcValues(keyName)
     const saved = await saveConfig()
-    await window.nhacApp.engineRequest('set_cubase_cc', {
+    await nhacApp.engineRequest('set_cubase_cc', {
       channel: 0,
       control: 17,
       value: values.keyValue,
       midi_output_name: saved.midiOutputName || midiSettings.output,
     })
-    await window.nhacApp.engineRequest('set_cubase_cc', {
+    await nhacApp.engineRequest('set_cubase_cc', {
       channel: 0,
       control: 18,
       value: values.scaleValue,
@@ -354,6 +512,7 @@ export default function ToneLinkAssistant() {
   }
 
   function applyMidiFeedback(control: number, value: number) {
+    const nextValue = clampMidiValue(value)
     const isActive = value >= 64
     if (control === cc.controls.beat) setControls((current) => ({ ...current, beat: isActive }))
     if (control === cc.controls.mic) setControls((current) => ({ ...current, mic: isActive }))
@@ -361,34 +520,35 @@ export default function ToneLinkAssistant() {
     if (control === cc.effects.tune) setEffects((current) => ({ ...current, tune: isActive }))
     if (control === cc.effects.lofi) setEffects((current) => ({ ...current, lofi: isActive }))
     if (control === cc.effects.remix) setEffects((current) => ({ ...current, remix: isActive }))
-    if (control === cc.volumes.beat) setVolumes((current) => ({ ...current, beat: value }))
-    if (control === cc.volumes.mic) setVolumes((current) => ({ ...current, mic: value }))
-    if (control === cc.volumes.vang) setVolumes((current) => ({ ...current, vang: value }))
-    if (control === cc.volumes.vangNgan) setVolumes((current) => ({ ...current, vangNgan: value }))
-    if (control === cc.volumes.delay) setVolumes((current) => ({ ...current, delay: value }))
+    if (control === cc.volumes.beat) setVolumes((current) => ({ ...current, beat: nextValue }))
+    if (control === cc.volumes.mic) setVolumes((current) => ({ ...current, mic: nextValue }))
+    if (control === cc.volumes.vang) setVolumes((current) => ({ ...current, vang: nextValue }))
+    if (control === cc.volumes.vangNgan) setVolumes((current) => ({ ...current, vangNgan: nextValue }))
+    if (control === cc.volumes.delay) setVolumes((current) => ({ ...current, delay: nextValue }))
+    if (control === cc.pitchShift) setPitchShift(pitchCcToDisplay(nextValue))
   }
 
   async function chooseCubasePath() {
-    const filePath = await window.nhacApp.selectCubase()
+    const filePath = await nhacApp.selectCubase()
     if (filePath) setConfigSettings((current) => ({ ...current, cubasePath: filePath }))
   }
 
   async function exportPreset() {
-    await window.nhacApp.exportPreset({
+    await nhacApp.exportPreset({
       name: `ToneLink preset ${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`,
       version: 1,
-      controls: { ...controls, ...volumes, ...effects },
+      controls: { ...controls, ...volumes, ...effects, pitchShift },
     })
   }
 
   async function importPreset() {
-    await window.nhacApp.importPreset()
+    await nhacApp.importPreset()
   }
 
   return (
     <div className="bg-transparent flex items-center justify-center p-0">
       <div className="w-fit">
-        <div className="drag-region bg-card rounded-2xl border border-border p-2.5 shadow-xl">
+        <div ref={toolbarRef} className="drag-region bg-card rounded-2xl border border-border p-2.5 shadow-xl">
           <div className="flex items-center justify-center gap-1.5">
             <div className="flex items-center gap-1.5 shrink-0">
               <div className="relative">
@@ -443,6 +603,7 @@ export default function ToneLinkAssistant() {
               <ToggleBtn label="Beat" active={controls.beat} onClick={() => toggleControl('beat')} />
               <ToggleBtn label="Mic" active={controls.mic} onClick={() => toggleControl('mic')} />
               <ToggleBtn label="Vang" active={controls.vang} onClick={() => toggleControl('vang')} />
+              <PitchShiftControl value={pitchShift} onChange={updatePitchShift} />
             </div>
 
             <div className="h-5 w-px bg-border" />
@@ -459,10 +620,8 @@ export default function ToneLinkAssistant() {
 
               <div className="relative">
                 <button
-                  onClick={() => setShowSettings(!showSettings)}
-                  className={`p-1 rounded-md transition-all ${
-                    showSettings ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  }`}
+                  onClick={() => nhacApp.openSettingsWindow ? nhacApp.openSettingsWindow() : setShowSettings(!showSettings)}
+                  className="p-1 rounded-md transition-all text-muted-foreground hover:text-foreground hover:bg-muted"
                   title="Settings"
                 >
                   <Settings className="w-3 h-3" />
@@ -635,7 +794,7 @@ export default function ToneLinkAssistant() {
                   <div className="w-2 h-2 bg-card border-b border-r border-border rotate-45 absolute right-3 -bottom-1" />
                 </div>
               </div>
-              <button onClick={() => window.nhacApp.launchCubase(configSettings.cubasePath)} className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-primary text-primary-foreground text-[9px] font-medium hover:bg-primary/90 transition-all">
+              <button onClick={() => nhacApp.launchCubase(configSettings.cubasePath)} className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-primary text-primary-foreground text-[9px] font-medium hover:bg-primary/90 transition-all">
                 <ExternalLink className="w-2.5 h-2.5" />
                 <span>Cubase</span>
               </button>
@@ -644,11 +803,11 @@ export default function ToneLinkAssistant() {
 
           <div className="flex items-center justify-center gap-1.5 mt-2 pt-2 border-t border-border">
             <div className="flex items-center gap-0.5 shrink-0">
-              <VolumeControl value={volumes.beat} onChange={(value) => updateVolume('beat', value)} icon={<Music className="w-3.5 h-3.5" />} label="Beat" />
-              <VolumeControl value={volumes.mic} onChange={(value) => updateVolume('mic', value)} icon={<Mic className="w-3.5 h-3.5" />} label="Mic" />
-              <VolumeControl value={volumes.vang} onChange={(value) => updateVolume('vang', value)} icon={<Waves className="w-3.5 h-3.5" />} label="Vang" />
-              <VolumeControl value={volumes.vangNgan} onChange={(value) => updateVolume('vangNgan', value)} icon={<Volume2 className="w-3.5 h-3.5" />} label="Vang Ngắn" />
-              <VolumeControl value={volumes.delay} onChange={(value) => updateVolume('delay', value)} icon={<Timer className="w-3.5 h-3.5" />} label="Delay" />
+              <VolumeControl value={volumes.beat} onChange={(value) => updateVolume('beat', value)} icon={<Music className="w-3.5 h-3.5" />} label="Beat" onPopupChange={handleVolumePopupChange} />
+              <VolumeControl value={volumes.mic} onChange={(value) => updateVolume('mic', value)} icon={<Mic className="w-3.5 h-3.5" />} label="Mic" onPopupChange={handleVolumePopupChange} />
+              <VolumeControl value={volumes.vang} onChange={(value) => updateVolume('vang', value)} icon={<Waves className="w-3.5 h-3.5" />} label="Vang" onPopupChange={handleVolumePopupChange} />
+              <VolumeControl value={volumes.vangNgan} onChange={(value) => updateVolume('vangNgan', value)} icon={<Volume2 className="w-3.5 h-3.5" />} label="Vang Ngan" onPopupChange={handleVolumePopupChange} />
+              <VolumeControl value={volumes.delay} onChange={(value) => updateVolume('delay', value)} icon={<Timer className="w-3.5 h-3.5" />} label="Delay" onPopupChange={handleVolumePopupChange} />
             </div>
 
             <div className="h-5 w-px bg-border" />

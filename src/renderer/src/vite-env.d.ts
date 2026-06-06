@@ -47,6 +47,9 @@ declare global {
       launchCubase: (path: string) => Promise<boolean>
       exportPreset: (preset: unknown) => Promise<{ saved: boolean; filePath?: string }>
       importPreset: () => Promise<{ imported: boolean; filePath?: string; preset?: unknown }>
+      openSettingsWindow: () => Promise<boolean>
+      closeCurrentWindow: () => Promise<boolean>
+      setMainWindowSize: (width: number, height: number) => Promise<boolean>
       engineRequest: (command: string, payload?: Record<string, unknown>) => Promise<EngineResponse>
       stopEngineProcess: () => Promise<boolean>
       onYoutubeVideoSelected: (callback: (payload: { videoId: string; url: string }) => void) => void
