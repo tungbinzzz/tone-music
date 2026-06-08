@@ -1,5 +1,11 @@
 /// <reference types="vite/client" />
 
+declare module '*.png' { const src: string; export default src }
+declare module '*.jpg' { const src: string; export default src }
+declare module '*.jpeg' { const src: string; export default src }
+declare module '*.svg' { const src: string; export default src }
+declare module '*.webp' { const src: string; export default src }
+
 type AppConfig = {
   youtubeUrl?: string
   cubasePath?: string
@@ -51,9 +57,16 @@ declare global {
       openLaughWindow: () => Promise<boolean>
       closeCurrentWindow: () => Promise<boolean>
       setMainWindowSize: (width: number, height: number) => Promise<boolean>
+      minimizeWindow: () => Promise<boolean>
+      setAlwaysOnTop: (flag: boolean) => Promise<boolean>
+      minimizeCurrentWindow: () => Promise<boolean>
+      quitApp: () => Promise<boolean>
+      selectAudioFile: () => Promise<string | null>
+      readAudioFile: (filePath: string) => Promise<{ ok: boolean; base64?: string; size?: number; error?: string }>
       engineRequest: (command: string, payload?: Record<string, unknown>) => Promise<EngineResponse>
       stopEngineProcess: () => Promise<boolean>
       onYoutubeVideoSelected: (callback: (payload: { videoId: string; url: string }) => void) => void | (() => void)
+      onYoutubePlaybackState: (callback: (payload: { playing: boolean }) => void) => void | (() => void)
       onEngineEvent: (callback: (payload: EngineEvent) => void) => void | (() => void)
       onEngineLog: (callback: (payload: { level?: string; text: string }) => void) => void | (() => void)
       onConfigChanged: (callback: (payload: AppConfig) => void) => void | (() => void)

@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
+const APP_ICON = path.join(__dirname, '..', '..', 'src', 'assets', 'logo.png');
+
 const DEFAULT_CONFIG = {
   youtubeUrl: 'https://www.youtube.com',
   cubasePath: '',
@@ -251,10 +253,11 @@ function openYoutubeWindow(url) {
     height: 420,
     minWidth: 700,
     minHeight: 420,
-    title: 'YouTube - Cubase Tone Assistant',
+    title: 'YouTube - TC Studio',
     backgroundColor: '#111111',
     autoHideMenuBar: true,
     frame: false,
+    icon: APP_ICON,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -284,7 +287,28 @@ function openYoutubeWindow(url) {
       }
     `).catch(() => {});
   });
+
+  // Poll video play/pause state every second
+  let lastPlayingState = null;
+  const playbackPoller = setInterval(async () => {
+    if (!youtubeWindow || youtubeWindow.isDestroyed()) {
+      clearInterval(playbackPoller);
+      return;
+    }
+    try {
+      const playing = await youtubeWindow.webContents.executeJavaScript(
+        '(function(){ var v = document.querySelector("video"); return v ? !v.paused && !v.ended && v.readyState > 2 : false; })()'
+      );
+      if (playing !== lastPlayingState) {
+        lastPlayingState = playing;
+        emitToRenderer('youtube:playback-state', { playing });
+      }
+    } catch (_) { /* page not ready */ }
+  }, 1000);
+
   youtubeWindow.on('closed', () => {
+    clearInterval(playbackPoller);
+    emitToRenderer('youtube:playback-state', { playing: false });
     youtubeWindow = undefined;
   });
 
@@ -348,15 +372,17 @@ function openLaughWindow() {
   }
 
   laughWindow = new BrowserWindow({
-    width: 360,
-    height: 330,
-    minWidth: 330,
-    minHeight: 300,
+    width: 380,
+    height: 420,
+    minWidth: 350,
+    minHeight: 380,
     title: 'ToneLink Laughs',
     backgroundColor: '#101317',
     autoHideMenuBar: true,
     frame: false,
     resizable: false,
+    minimizable: true,
+    icon: APP_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -383,6 +409,7 @@ function createWindow() {
     frame: false,
     transparent: true,
     resizable: false,
+    icon: APP_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -487,11 +514,56 @@ ipcMain.handle('window:close-current', (event) => {
   }
   return false;
 });
+ipcMain.handle('dialog:open-audio', async (event) => {
+  const parentWindow = BrowserWindow.fromWebContents(event.sender);
+  const result = await dialog.showOpenDialog(parentWindow ?? undefined, {
+    title: 'Chọn file âm thanh',
+    properties: ['openFile'],
+    filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'webm'] }]
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+ipcMain.handle('audio:read-file', async (_event, filePath) => {
+  try {
+    const buffer = fs.readFileSync(filePath);
+    return { ok: true, base64: buffer.toString('base64'), size: buffer.length };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+ipcMain.handle('window:minimize-current', (event) => {
+  const currentWindow = BrowserWindow.fromWebContents(event.sender);
+  if (currentWindow && !currentWindow.isDestroyed()) {
+    if (currentWindow.isMinimizable()) {
+      currentWindow.minimize();
+    } else {
+      currentWindow.hide();
+    }
+    return true;
+  }
+  return false;
+});
 ipcMain.handle('window:set-main-size', (_event, width, height) => {
   if (!mainWindow || mainWindow.isDestroyed()) return false;
   const nextWidth = Math.max(1, Math.ceil(Number(width) || 1));
   const nextHeight = Math.max(1, Math.ceil(Number(height) || 1));
   mainWindow.setContentSize(nextWidth, nextHeight);
+  return true;
+});
+ipcMain.handle('window:minimize', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  mainWindow.minimize();
+  return true;
+});
+ipcMain.handle('window:set-always-on-top', (_event, flag) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  mainWindow.setAlwaysOnTop(!!flag, 'screen-saver');
+  mainWindow.setVisibleOnAllWorkspaces(!!flag);
+  return true;
+});
+ipcMain.handle('window:quit', () => {
+  app.quit();
   return true;
 });
 ipcMain.handle('engine:request', (_event, command, payload) => requestEngine(command, payload));

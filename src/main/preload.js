@@ -13,12 +13,23 @@ contextBridge.exposeInMainWorld('nhacApp', {
   openLaughWindow: () => ipcRenderer.invoke('laughs:open'),
   closeCurrentWindow: () => ipcRenderer.invoke('window:close-current'),
   setMainWindowSize: (width, height) => ipcRenderer.invoke('window:set-main-size', width, height),
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+  setAlwaysOnTop: (flag) => ipcRenderer.invoke('window:set-always-on-top', flag),
+  minimizeCurrentWindow: () => ipcRenderer.invoke('window:minimize-current'),
+  quitApp: () => ipcRenderer.invoke('window:quit'),
+  selectAudioFile: () => ipcRenderer.invoke('dialog:open-audio'),
+  readAudioFile: (filePath) => ipcRenderer.invoke('audio:read-file', filePath),
   engineRequest: (command, payload) => ipcRenderer.invoke('engine:request', command, payload),
   stopEngineProcess: () => ipcRenderer.invoke('engine:stop-process'),
   onYoutubeVideoSelected: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('youtube:video-selected', listener);
     return () => ipcRenderer.removeListener('youtube:video-selected', listener);
+  },
+  onYoutubePlaybackState: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('youtube:playback-state', listener);
+    return () => ipcRenderer.removeListener('youtube:playback-state', listener);
   },
   onEngineEvent: (callback) => {
     const listener = (_event, payload) => callback(payload);

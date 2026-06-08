@@ -24,6 +24,7 @@
     "files": [
       "package.json",
       "src/main/**/*",
+      "src/assets/**/*",
       "dist/renderer/**/*"
     ],
     "extraResources": [
@@ -41,6 +42,7 @@
       }
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "nsis",
         "portable"

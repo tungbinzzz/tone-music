@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import logo from '../../../assets/logo.png'
 import {
   Settings,
   ExternalLink,
@@ -19,6 +20,11 @@ import {
   Minus,
   Plus,
   Smile,
+  X,
+  Clock,
+  Gauge,
+  Pin,
+  PinOff,
 } from 'lucide-react'
 
 const KEY_TO_INDEX: Record<string, number> = {
@@ -88,6 +94,9 @@ const fallbackNhacApp: Window['nhacApp'] = {
   onEngineEvent: () => {},
   onEngineLog: () => {},
   onConfigChanged: () => {},
+  minimizeWindow: async () => false,
+  setAlwaysOnTop: async () => false,
+  quitApp: async () => false,
 }
 
 type VolumeControlProps = {
@@ -358,6 +367,7 @@ export default function ToneLinkAssistant() {
   const [returnSpeed, setReturnSpeed] = useState(64)
   const [autoSendKey, setAutoSendKey] = useState(true)
   const [isLive, setIsLive] = useState(false)
+  const [alwaysOnTop, setAlwaysOnTop] = useState(() => localStorage.getItem('toolbar-always-on-top') === 'true')
   const [currentTime, setCurrentTime] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [settingsTab, setSettingsTab] = useState<'midi' | 'config'>('midi')
@@ -402,6 +412,12 @@ export default function ToneLinkAssistant() {
     return () => clearInterval(interval)
   }, [])
 
+  // Sync alwaysOnTop state with Electron and localStorage
+  useEffect(() => {
+    localStorage.setItem('toolbar-always-on-top', String(alwaysOnTop))
+    nhacApp.setAlwaysOnTop?.(alwaysOnTop)
+  }, [alwaysOnTop, nhacApp])
+
   useEffect(() => {
     autoSendKeyRef.current = autoSendKey
   }, [autoSendKey])
@@ -415,6 +431,20 @@ export default function ToneLinkAssistant() {
       })
     })
 
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
+  }, [nhacApp])
+
+  // Auto start/stop tone detection based on YouTube playback state
+  useEffect(() => {
+    const unsubscribe = nhacApp.onYoutubePlaybackState?.((payload) => {
+      if (payload.playing) {
+        startToneDetection().catch(() => {})
+      } else {
+        stopToneDetection()
+      }
+    })
     return () => {
       if (typeof unsubscribe === 'function') unsubscribe()
     }
@@ -747,8 +777,15 @@ export default function ToneLinkAssistant() {
           <div className="flex items-center justify-center gap-1.5">
             <div className="flex items-center gap-1.5 shrink-0">
               <div className="relative">
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                  <Disc3 className="w-3.5 h-3.5 text-primary-foreground" />
+                <div
+                  className={`w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-black shadow-lg transition-shadow duration-500 ${isLive ? 'logo-spinning-wrapper' : ''}`}
+                  style={{ boxShadow: isLive ? '0 0 10px 2px rgba(180,140,60,0.55)' : '0 0 8px 1px rgba(180,140,60,0.35)' }}
+                >
+                  <img
+                    src={logo}
+                    alt="TC Studio"
+                    className={`w-full h-full object-cover ${isLive ? 'logo-spinning' : ''}`}
+                  />
                 </div>
                 {isLive && <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full animate-pulse" />}
               </div>
@@ -757,9 +794,13 @@ export default function ToneLinkAssistant() {
             <div className="h-5 w-px bg-border" />
 
             <div className="flex items-center gap-1.5 shrink-0">
-              <div className="bg-background rounded-lg px-2 py-1 border border-border min-w-[45px] text-center">
+              <div className="bg-background rounded-lg px-2 py-1 border border-border min-w-[52px] text-center">
                 <p className="text-[8px] text-muted-foreground uppercase">Tone</p>
-                <p className="text-sm font-bold font-mono text-foreground leading-tight">{toneData.tone}</p>
+                {toneData.isDetecting && toneData.tone === '--' ? (
+                  <p className="text-[9px] font-medium text-primary animate-pulse leading-tight whitespace-nowrap">Đang dò...</p>
+                ) : (
+                  <p className="text-sm font-bold font-mono text-foreground leading-tight">{toneData.tone}</p>
+                )}
               </div>
               <div className="flex gap-0.5">
                 <button
@@ -774,17 +815,19 @@ export default function ToneLinkAssistant() {
                 </button>
                 <button
                   onClick={stopToneDetection}
-                  className="p-1 rounded-md bg-muted text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-all"
+                  className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[9px] font-medium transition-all bg-muted text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
                   title="Dừng dò tone"
                 >
                   <Square className="w-3 h-3" />
+                  <span>Dừng</span>
                 </button>
                 <button
                   onClick={() => sendKeyScaleToCubase()}
-                  className="p-1 rounded-md bg-muted text-muted-foreground hover:bg-muted/80 transition-all"
+                  className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[9px] font-medium transition-all bg-muted text-muted-foreground hover:bg-muted/80"
                   title="Gửi key/scale sang Cubase"
                 >
                   <Send className="w-3 h-3" />
+                  <span>Gửi</span>
                 </button>
               </div>
             </div>
@@ -800,7 +843,53 @@ export default function ToneLinkAssistant() {
 
             <div className="h-5 w-px bg-border" />
 
+            <div className="flex items-center gap-0.5 shrink-0 no-drag">
+              <button
+                onClick={() => setAlwaysOnTop(v => !v)}
+                className={`p-1 rounded-md transition-all ${alwaysOnTop ? 'text-amber-400 bg-amber-400/15 hover:bg-amber-400/25' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                title={alwaysOnTop ? 'Đang ưu tiên hiển thị — bấm để tắt' : 'Ưu tiên hiển thị trên cùng'}
+              >
+                {alwaysOnTop ? <Pin className="w-3 h-3" /> : <PinOff className="w-3 h-3" />}
+              </button>
+              <button
+                onClick={() => nhacApp.minimizeWindow?.()}
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+                title="Thu nhỏ"
+              >
+                <Minus className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => nhacApp.quitApp?.()}
+                className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                title="Đóng ứng dụng"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center gap-1.5 mt-2 pt-2 border-t border-border">
+            <div className="flex items-center gap-0.5 shrink-0">
+              <VolumeControl value={volumes.beat} onChange={(value) => updateVolume('beat', value)} icon={<Music className="w-3.5 h-3.5" />} label="Nhạc" description="Âm lượng beat/nhạc nền" onPopupChange={handleVolumePopupChange} />
+              <VolumeControl value={volumes.mic} onChange={(value) => updateVolume('mic', value)} icon={<Mic className="w-3.5 h-3.5" />} label="Mic" description="Âm lượng micro hát" onPopupChange={handleVolumePopupChange} />
+              <VolumeControl value={volumes.vang} onChange={(value) => updateVolume('vang', value)} icon={<Waves className="w-3.5 h-3.5" />} label="Vang" description="Âm lượng tiếng vang chính" onPopupChange={handleVolumePopupChange} />
+              <VolumeControl value={volumes.vangNgan} onChange={(value) => updateVolume('vangNgan', value)} icon={<Volume2 className="w-3.5 h-3.5" />} label="Vang ngắn" description="Âm lượng vang ngắn/phụ" onPopupChange={handleVolumePopupChange} />
+              <VolumeControl value={volumes.delay} onChange={(value) => updateVolume('delay', value)} icon={<Clock className="w-3.5 h-3.5" />} label="Delay" description="Âm lượng tiếng lặp/delay" onPopupChange={handleVolumePopupChange} />
+              <ParameterControl value={returnSpeed} onChange={updateReturnSpeed} icon={<Gauge className="w-3.5 h-3.5" />} label="Tốc độ tune" description="Chỉnh Return Speed của Auto-Tune" onPopupChange={handleVolumePopupChange} />
+            </div>
+
+            <div className="h-5 w-px bg-border" />
+
             <div className="flex items-center gap-1 shrink-0">
+              <EffectBtn label="Tune" active={effects.tune} onClick={() => toggleEffect('tune')} icon={<Music className="w-2.5 h-2.5" />} />
+              <EffectBtn label="Lofi" active={effects.lofi} onClick={() => toggleEffect('lofi')} icon={<Radio className="w-2.5 h-2.5" />} />
+              <EffectBtn label="Remix" active={effects.remix} onClick={() => toggleEffect('remix')} icon={<Sparkles className="w-2.5 h-2.5" />} />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between mt-2 pt-2 border-t border-border">
+            <span className="text-[10px] text-muted-foreground">© TC Studio. All rights reserved.</span>
+            <div className="flex items-center gap-1 no-drag">
               <div className="relative">
                 <button
                   onClick={() => nhacApp.openSettingsWindow ? nhacApp.openSettingsWindow() : setShowSettings(!showSettings)}
@@ -904,7 +993,7 @@ export default function ToneLinkAssistant() {
                           </button>
                         </div>
                         <button onClick={() => saveConfig(configSettings, midiSettings, autoSendKey, true)} className="w-full mt-1 px-2 py-1 rounded-md bg-primary text-primary-foreground text-[9px] font-medium hover:bg-primary/90 transition-all">
-                          {saveStatus || 'LÆ°u cÃ i Ä‘áº·t'}
+                          {saveStatus || 'Lưu cài đặt'}
                         </button>
                       </div>
                     ) : (
@@ -983,30 +1072,6 @@ export default function ToneLinkAssistant() {
                 <span>Cười</span>
               </button>
             </div>
-          </div>
-
-          <div className="flex items-center justify-center gap-1.5 mt-2 pt-2 border-t border-border">
-            <div className="flex items-center gap-0.5 shrink-0">
-              <VolumeControl value={volumes.beat} onChange={(value) => updateVolume('beat', value)} icon={<Music className="w-3.5 h-3.5" />} label="Nhạc" description="Âm lượng beat/nhạc nền" onPopupChange={handleVolumePopupChange} />
-              <VolumeControl value={volumes.mic} onChange={(value) => updateVolume('mic', value)} icon={<Mic className="w-3.5 h-3.5" />} label="Mic" description="Âm lượng micro hát" onPopupChange={handleVolumePopupChange} />
-              <VolumeControl value={volumes.vang} onChange={(value) => updateVolume('vang', value)} icon={<Waves className="w-3.5 h-3.5" />} label="Vang" description="Âm lượng tiếng vang chính" onPopupChange={handleVolumePopupChange} />
-              <VolumeControl value={volumes.vangNgan} onChange={(value) => updateVolume('vangNgan', value)} icon={<Volume2 className="w-3.5 h-3.5" />} label="Vang ngắn" description="Âm lượng vang ngắn/phụ" onPopupChange={handleVolumePopupChange} />
-              <VolumeControl value={volumes.delay} onChange={(value) => updateVolume('delay', value)} icon={<Timer className="w-3.5 h-3.5" />} label="Delay" description="Âm lượng tiếng lặp/delay" onPopupChange={handleVolumePopupChange} />
-              <ParameterControl value={returnSpeed} onChange={updateReturnSpeed} icon={<Timer className="w-3.5 h-3.5" />} label="Tốc độ tune" description="Chỉnh Return Speed của Auto-Tune" onPopupChange={handleVolumePopupChange} />
-            </div>
-
-            <div className="h-5 w-px bg-border" />
-
-            <div className="flex items-center gap-1 shrink-0">
-              <EffectBtn label="Tune" active={effects.tune} onClick={() => toggleEffect('tune')} icon={<Music className="w-2.5 h-2.5" />} />
-              <EffectBtn label="Lofi" active={effects.lofi} onClick={() => toggleEffect('lofi')} icon={<Radio className="w-2.5 h-2.5" />} />
-              <EffectBtn label="Remix" active={effects.remix} onClick={() => toggleEffect('remix')} icon={<Sparkles className="w-2.5 h-2.5" />} />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between mt-2 pt-2 border-t border-border text-[10px] text-muted-foreground">
-            <span className="font-medium">Bản quyền thuộc về TC Studio</span>
-            <span className="font-mono">{currentTime}</span>
           </div>
         </div>
       </div>
