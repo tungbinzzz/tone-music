@@ -48,6 +48,7 @@ declare global {
       exportPreset: (preset: unknown) => Promise<{ saved: boolean; filePath?: string }>
       importPreset: () => Promise<{ imported: boolean; filePath?: string; preset?: unknown }>
       openSettingsWindow: () => Promise<boolean>
+      openLaughWindow: () => Promise<boolean>
       closeCurrentWindow: () => Promise<boolean>
       setMainWindowSize: (width: number, height: number) => Promise<boolean>
       engineRequest: (command: string, payload?: Record<string, unknown>) => Promise<EngineResponse>
@@ -55,6 +56,7 @@ declare global {
       onYoutubeVideoSelected: (callback: (payload: { videoId: string; url: string }) => void) => void | (() => void)
       onEngineEvent: (callback: (payload: EngineEvent) => void) => void | (() => void)
       onEngineLog: (callback: (payload: { level?: string; text: string }) => void) => void | (() => void)
+      onConfigChanged: (callback: (payload: AppConfig) => void) => void | (() => void)
     }
   }
 }

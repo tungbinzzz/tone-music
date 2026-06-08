@@ -20,6 +20,7 @@ const DEFAULT_CONFIG = {
 let mainWindow;
 let youtubeWindow;
 let settingsWindow;
+let laughWindow;
 let engineProcess;
 let nextRequestId = 1;
 const pendingRequests = new Map();
@@ -71,6 +72,14 @@ function saveConfig(config) {
 function emitToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
+  }
+}
+
+function emitToAllRenderers(channel, payload) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(channel, payload);
+    }
   }
 }
 
@@ -332,6 +341,37 @@ function openSettingsWindow() {
   return true;
 }
 
+function openLaughWindow() {
+  if (laughWindow && !laughWindow.isDestroyed()) {
+    laughWindow.focus();
+    return true;
+  }
+
+  laughWindow = new BrowserWindow({
+    width: 360,
+    height: 330,
+    minWidth: 330,
+    minHeight: 300,
+    title: 'ToneLink Laughs',
+    backgroundColor: '#101317',
+    autoHideMenuBar: true,
+    frame: false,
+    resizable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false
+    }
+  });
+  laughWindow.setMenuBarVisibility(false);
+  laughWindow.on('closed', () => {
+    laughWindow = undefined;
+  });
+  loadRendererWindow(laughWindow, '?view=laughs');
+  return true;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 620,
@@ -382,6 +422,7 @@ ipcMain.handle('config:get', () => loadConfig());
 ipcMain.handle('config:save', (_event, config) => {
   const nextConfig = normalizeConfig(config);
   saveConfig(nextConfig);
+  emitToAllRenderers('config:changed', nextConfig);
   return nextConfig;
 });
 
@@ -437,6 +478,7 @@ ipcMain.handle('preset:import', async () => {
 });
 
 ipcMain.handle('settings:open', () => openSettingsWindow());
+ipcMain.handle('laughs:open', () => openLaughWindow());
 ipcMain.handle('window:close-current', (event) => {
   const currentWindow = BrowserWindow.fromWebContents(event.sender);
   if (currentWindow && !currentWindow.isDestroyed()) {

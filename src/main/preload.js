@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('nhacApp', {
   exportPreset: (preset) => ipcRenderer.invoke('preset:export', preset),
   importPreset: () => ipcRenderer.invoke('preset:import'),
   openSettingsWindow: () => ipcRenderer.invoke('settings:open'),
+  openLaughWindow: () => ipcRenderer.invoke('laughs:open'),
   closeCurrentWindow: () => ipcRenderer.invoke('window:close-current'),
   setMainWindowSize: (width, height) => ipcRenderer.invoke('window:set-main-size', width, height),
   engineRequest: (command, payload) => ipcRenderer.invoke('engine:request', command, payload),
@@ -28,5 +29,10 @@ contextBridge.exposeInMainWorld('nhacApp', {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('engine:log', listener);
     return () => ipcRenderer.removeListener('engine:log', listener);
+  },
+  onConfigChanged: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('config:changed', listener);
+    return () => ipcRenderer.removeListener('config:changed', listener);
   }
 });

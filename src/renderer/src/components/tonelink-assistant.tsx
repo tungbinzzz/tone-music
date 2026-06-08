@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Minus,
   Plus,
+  Smile,
 } from 'lucide-react'
 
 const KEY_TO_INDEX: Record<string, number> = {
@@ -75,6 +76,7 @@ const fallbackNhacApp: Window['nhacApp'] = {
   exportPreset: async () => ({ saved: false }),
   importPreset: async () => ({ imported: false }),
   openSettingsWindow: async () => false,
+  openLaughWindow: async () => false,
   closeCurrentWindow: async () => false,
   setMainWindowSize: async () => false,
   engineRequest: async (command) => {
@@ -85,6 +87,7 @@ const fallbackNhacApp: Window['nhacApp'] = {
   onYoutubeVideoSelected: () => {},
   onEngineEvent: () => {},
   onEngineLog: () => {},
+  onConfigChanged: () => {},
 }
 
 type VolumeControlProps = {
@@ -92,6 +95,7 @@ type VolumeControlProps = {
   onChange: (value: number) => void
   icon: React.ReactNode
   label: string
+  description?: string
   max?: number
   onPopupChange?: (isOpen: boolean) => void
 }
@@ -101,6 +105,7 @@ type ParameterControlProps = {
   onChange: (value: number) => void
   icon: React.ReactNode
   label: string
+  description?: string
   max?: number
   onPopupChange?: (isOpen: boolean) => void
 }
@@ -120,7 +125,7 @@ function pitchCcToDisplay(value: number) {
   return Math.min(Math.max(Math.round((safeValue - PITCH_CC_CENTER) / PITCH_CC_STEP), PITCH_DISPLAY_MIN), PITCH_DISPLAY_MAX)
 }
 
-function VolumeControl({ value, onChange, icon, label, max = 127, onPopupChange }: VolumeControlProps) {
+function VolumeControl({ value, onChange, icon, label, description, max = 127, onPopupChange }: VolumeControlProps) {
   const [isOpen, setIsOpen] = useState(false)
   const percentage = (value / max) * 100
   const displayPercentage = Math.round(percentage)
@@ -147,7 +152,7 @@ function VolumeControl({ value, onChange, icon, label, max = 127, onPopupChange 
         className={`p-1.5 rounded-md transition-all duration-200 ${
           isOpen ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
         }`}
-        title={label}
+        title={description ? `${label}: ${description}` : label}
       >
         {icon}
       </button>
@@ -171,6 +176,9 @@ function VolumeControl({ value, onChange, icon, label, max = 127, onPopupChange 
             <span className="text-[9px] text-muted-foreground uppercase tracking-wider">{label}</span>
             <span className="text-[10px] font-mono text-primary">{displayPercentage}%</span>
           </div>
+          {description && (
+            <p className="mb-1.5 text-[9px] leading-tight text-muted-foreground">{description}</p>
+          )}
           <div className="relative h-1 bg-muted rounded-full overflow-hidden">
             <div
               className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary/80 to-primary rounded-full"
@@ -192,7 +200,7 @@ function VolumeControl({ value, onChange, icon, label, max = 127, onPopupChange 
   )
 }
 
-function ParameterControl({ value, onChange, icon, label, max = 127, onPopupChange }: ParameterControlProps) {
+function ParameterControl({ value, onChange, icon, label, description, max = 127, onPopupChange }: ParameterControlProps) {
   const [isOpen, setIsOpen] = useState(false)
   const percentage = Math.round((value / max) * 100)
 
@@ -218,7 +226,7 @@ function ParameterControl({ value, onChange, icon, label, max = 127, onPopupChan
         className={`p-1.5 rounded-md transition-all duration-200 ${
           isOpen ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
         }`}
-        title={label}
+        title={description ? `${label}: ${description}` : label}
       >
         {icon}
       </button>
@@ -242,6 +250,9 @@ function ParameterControl({ value, onChange, icon, label, max = 127, onPopupChan
             <span className="text-[9px] text-muted-foreground uppercase tracking-wider">{label}</span>
             <span className="text-[10px] font-mono text-primary">{percentage}%</span>
           </div>
+          {description && (
+            <p className="mb-1.5 text-[9px] leading-tight text-muted-foreground">{description}</p>
+          )}
           <div className="relative h-1 bg-muted rounded-full overflow-hidden">
             <div
               className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary/80 to-primary rounded-full"
@@ -279,7 +290,7 @@ function PitchShiftControl({
         onClick={() => canDecrease && onChange(value - 1)}
         disabled={!canDecrease}
         className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
-        title="Giảm tông"
+        title="Giảm tông nhạc"
       >
         <Minus className="h-3 w-3" />
       </button>
@@ -290,7 +301,7 @@ function PitchShiftControl({
         onClick={() => canIncrease && onChange(value + 1)}
         disabled={!canIncrease}
         className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
-        title="Tăng tông"
+        title="Tăng tông nhạc"
       >
         <Plus className="h-3 w-3" />
       </button>
@@ -302,11 +313,12 @@ function ToggleBtn({ label, active, onClick }: { label: string; active: boolean;
   return (
     <button
       onClick={onClick}
-      className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 ${
+      className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 cursor-pointer ${
         active ? 'bg-primary text-primary-foreground shadow-md shadow-primary/30' : 'bg-muted text-muted-foreground hover:bg-muted/80'
       }`}
+      title={`${active ? 'Bấm để tắt' : 'Bấm để bật'} ${label}`}
     >
-      {label}
+      {active ? 'Tắt' : 'Bật'} {label}
     </button>
   )
 }
@@ -325,12 +337,13 @@ function EffectBtn({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 border ${
+      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 border cursor-pointer ${
         active ? 'bg-primary/10 border-primary text-primary' : 'bg-card border-border text-muted-foreground hover:border-primary/50'
       }`}
+      title={`${active ? 'Bấm để tắt' : 'Bấm để bật'} ${label}`}
     >
       {icon}
-      {label}
+      {active ? 'Tắt' : 'Bật'} {label}
     </button>
   )
 }
@@ -343,7 +356,7 @@ export default function ToneLinkAssistant() {
   const [effects, setEffects] = useState({ tune: false, lofi: false, remix: false })
   const [pitchShift, setPitchShift] = useState(0)
   const [returnSpeed, setReturnSpeed] = useState(64)
-  const [autoSendKey, setAutoSendKey] = useState(false)
+  const [autoSendKey, setAutoSendKey] = useState(true)
   const [isLive, setIsLive] = useState(false)
   const [currentTime, setCurrentTime] = useState('')
   const [showSettings, setShowSettings] = useState(false)
@@ -433,8 +446,8 @@ export default function ToneLinkAssistant() {
   }, [nhacApp, volumePopupOpen])
 
   useEffect(() => {
-    nhacApp.getConfig().then((config) => {
-      setAutoSendKey(Boolean(config.autoSendKey))
+    function applyConfig(config: AppConfig) {
+      setAutoSendKey(true)
       const feedbackInput = config.midiInputName || ''
       const midiOutput = config.midiOutputName || ''
       setMidiSettings({
@@ -454,11 +467,27 @@ export default function ToneLinkAssistant() {
       }
       if (feedbackInput) {
         setMidiInputs([feedbackInput])
+      }
+    }
+
+    nhacApp.getConfig().then((config) => {
+      applyConfig(config)
+      const feedbackInput = config.midiInputName || ''
+      const midiOutput = config.midiOutputName || ''
+      if (midiOutput) {
+        nhacApp.engineRequest('configure', { midi_output_name: midiOutput }).catch(console.error)
+        sendStartupGenericDefaults(midiOutput).catch(console.error)
+      }
+      if (feedbackInput) {
         nhacApp.engineRequest('start_midi_feedback', { midi_input_name: feedbackInput }).catch(console.error)
       }
     })
 
-    nhacApp.onEngineEvent((event) => {
+    const unsubscribeConfig = nhacApp.onConfigChanged((config) => {
+      applyConfig(config)
+    })
+
+    const unsubscribeEngine = nhacApp.onEngineEvent((event) => {
       if (event.type === 'tone') {
         const confidence = Math.round((event.confidence || 0) * 100)
         const nextTone = event.key || '--'
@@ -483,9 +512,23 @@ export default function ToneLinkAssistant() {
         applyMidiFeedback(Number(event.control), Number(event.value))
       }
     })
+
+    return () => {
+      if (typeof unsubscribeConfig === 'function') unsubscribeConfig()
+      if (typeof unsubscribeEngine === 'function') unsubscribeEngine()
+    }
   }, [nhacApp])
 
-  async function saveConfig(next = configSettings, midi = midiSettings, auto = autoSendKey, showSavedStatus = false) {
+  async function applyRuntimeConfig(saved: AppConfig) {
+    if (saved.midiOutputName) {
+      await nhacApp.engineRequest('configure', { midi_output_name: saved.midiOutputName })
+    }
+    if (saved.midiInputName) {
+      await nhacApp.engineRequest('start_midi_feedback', { midi_input_name: saved.midiInputName })
+    }
+  }
+
+  async function saveConfig(next = configSettings, midi = midiSettings, auto = true, showSavedStatus = false) {
     const saved = await nhacApp.saveConfig({
       youtubeUrl: next.youtubeUrl,
       pythonPath: next.pythonPath,
@@ -494,7 +537,7 @@ export default function ToneLinkAssistant() {
       autoLaunchCubase: next.autoOpenCubase,
       midiOutputName: midi.output,
       midiInputName: midi.feedbackInput,
-      autoSendKey: auto,
+      autoSendKey: true,
     })
 
     setConfigSettings({
@@ -509,9 +552,7 @@ export default function ToneLinkAssistant() {
       feedbackInput: saved.midiInputName || midi.feedbackInput,
     })
     if (showSavedStatus) {
-      if (saved.midiInputName) {
-        await nhacApp.engineRequest('start_midi_feedback', { midi_input_name: saved.midiInputName })
-      }
+      await applyRuntimeConfig(saved)
       if (!saved.autoLaunchYoutube) {
         await nhacApp.closeYoutube()
       }
@@ -723,12 +764,13 @@ export default function ToneLinkAssistant() {
               <div className="flex gap-0.5">
                 <button
                   onClick={startToneDetection}
-                  className={`p-1 rounded-md transition-all ${
+                  className={`flex items-center gap-1 rounded-md px-1.5 py-1 text-[9px] font-medium transition-all ${
                     toneData.isDetecting ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground hover:bg-primary hover:text-primary-foreground'
                   }`}
-                  title="Bắt đầu dò tone"
+                  title="Dò lại tone bài hát"
                 >
                   <Play className="w-3 h-3" />
+                  <span>Dò lại</span>
                 </button>
                 <button
                   onClick={stopToneDetection}
@@ -750,7 +792,7 @@ export default function ToneLinkAssistant() {
             <div className="h-5 w-px bg-border" />
 
             <div className="flex items-center gap-1 shrink-0">
-              <ToggleBtn label="Beat" active={controls.beat} onClick={() => toggleControl('beat')} />
+              <ToggleBtn label="Nhạc" active={controls.beat} onClick={() => toggleControl('beat')} />
               <ToggleBtn label="Mic" active={controls.mic} onClick={() => toggleControl('mic')} />
               <ToggleBtn label="Vang" active={controls.vang} onClick={() => toggleControl('vang')} />
               <PitchShiftControl value={pitchShift} onChange={updatePitchShift} />
@@ -932,17 +974,25 @@ export default function ToneLinkAssistant() {
                 <ExternalLink className="w-2.5 h-2.5" />
                 <span>YouTube</span>
               </button>
+              <button
+                onClick={() => nhacApp.openLaughWindow?.()}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground text-[9px] font-medium hover:bg-muted/80 hover:text-foreground transition-all"
+                title="Mở bảng tiếng cười"
+              >
+                <Smile className="w-2.5 h-2.5" />
+                <span>Cười</span>
+              </button>
             </div>
           </div>
 
           <div className="flex items-center justify-center gap-1.5 mt-2 pt-2 border-t border-border">
             <div className="flex items-center gap-0.5 shrink-0">
-              <VolumeControl value={volumes.beat} onChange={(value) => updateVolume('beat', value)} icon={<Music className="w-3.5 h-3.5" />} label="Beat" onPopupChange={handleVolumePopupChange} />
-              <VolumeControl value={volumes.mic} onChange={(value) => updateVolume('mic', value)} icon={<Mic className="w-3.5 h-3.5" />} label="Mic" onPopupChange={handleVolumePopupChange} />
-              <VolumeControl value={volumes.vang} onChange={(value) => updateVolume('vang', value)} icon={<Waves className="w-3.5 h-3.5" />} label="Vang" onPopupChange={handleVolumePopupChange} />
-              <VolumeControl value={volumes.vangNgan} onChange={(value) => updateVolume('vangNgan', value)} icon={<Volume2 className="w-3.5 h-3.5" />} label="Vang Ngan" onPopupChange={handleVolumePopupChange} />
-              <VolumeControl value={volumes.delay} onChange={(value) => updateVolume('delay', value)} icon={<Timer className="w-3.5 h-3.5" />} label="Delay" onPopupChange={handleVolumePopupChange} />
-              <ParameterControl value={returnSpeed} onChange={updateReturnSpeed} icon={<Timer className="w-3.5 h-3.5" />} label="Return" onPopupChange={handleVolumePopupChange} />
+              <VolumeControl value={volumes.beat} onChange={(value) => updateVolume('beat', value)} icon={<Music className="w-3.5 h-3.5" />} label="Nhạc" description="Âm lượng beat/nhạc nền" onPopupChange={handleVolumePopupChange} />
+              <VolumeControl value={volumes.mic} onChange={(value) => updateVolume('mic', value)} icon={<Mic className="w-3.5 h-3.5" />} label="Mic" description="Âm lượng micro hát" onPopupChange={handleVolumePopupChange} />
+              <VolumeControl value={volumes.vang} onChange={(value) => updateVolume('vang', value)} icon={<Waves className="w-3.5 h-3.5" />} label="Vang" description="Âm lượng tiếng vang chính" onPopupChange={handleVolumePopupChange} />
+              <VolumeControl value={volumes.vangNgan} onChange={(value) => updateVolume('vangNgan', value)} icon={<Volume2 className="w-3.5 h-3.5" />} label="Vang ngắn" description="Âm lượng vang ngắn/phụ" onPopupChange={handleVolumePopupChange} />
+              <VolumeControl value={volumes.delay} onChange={(value) => updateVolume('delay', value)} icon={<Timer className="w-3.5 h-3.5" />} label="Delay" description="Âm lượng tiếng lặp/delay" onPopupChange={handleVolumePopupChange} />
+              <ParameterControl value={returnSpeed} onChange={updateReturnSpeed} icon={<Timer className="w-3.5 h-3.5" />} label="Tốc độ tune" description="Chỉnh Return Speed của Auto-Tune" onPopupChange={handleVolumePopupChange} />
             </div>
 
             <div className="h-5 w-px bg-border" />
@@ -954,34 +1004,9 @@ export default function ToneLinkAssistant() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between mt-2 pt-2 border-t border-border text-[10px] text-muted-foreground font-mono">
-            <div className="flex items-center gap-3">
-              <span>Analysis: {analysis.latency} ms</span>
-              <span>Window: {analysis.window}</span>
-              <span>Instant: {analysis.instant}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-all ${autoSendKey ? 'bg-primary border-primary' : 'border-muted-foreground'}`}>
-                  {autoSendKey && (
-                    <svg className="w-2 h-2 text-primary-foreground" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                </div>
-                <span>Auto Key/Scale</span>
-                <input
-                  type="checkbox"
-                  checked={autoSendKey}
-                  onChange={(event) => {
-                    setAutoSendKey(event.target.checked)
-                    saveConfig(configSettings, midiSettings, event.target.checked)
-                  }}
-                  className="sr-only"
-                />
-              </label>
-              <span>UI: {currentTime}</span>
-            </div>
+          <div className="flex items-center justify-between mt-2 pt-2 border-t border-border text-[10px] text-muted-foreground">
+            <span className="font-medium">Bản quyền thuộc về TC Studio</span>
+            <span className="font-mono">{currentTime}</span>
           </div>
         </div>
       </div>

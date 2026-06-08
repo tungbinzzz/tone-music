@@ -11,6 +11,7 @@ const fallbackNhacApp: Window['nhacApp'] = {
   exportPreset: async () => ({ saved: false }),
   importPreset: async () => ({ imported: false }),
   openSettingsWindow: async () => false,
+  openLaughWindow: async () => false,
   closeCurrentWindow: async () => false,
   setMainWindowSize: async () => false,
   engineRequest: async (command) => {
@@ -21,6 +22,7 @@ const fallbackNhacApp: Window['nhacApp'] = {
   onYoutubeVideoSelected: () => {},
   onEngineEvent: () => {},
   onEngineLog: () => {},
+  onConfigChanged: () => {},
 }
 
 export default function SettingsWindow() {
@@ -46,15 +48,31 @@ export default function SettingsWindow() {
       if (nextConfig.midiOutputName) setMidiOutputs([nextConfig.midiOutputName])
       if (nextConfig.midiInputName) setMidiInputs([nextConfig.midiInputName])
     })
+    return nhacApp.onConfigChanged((nextConfig) => {
+      setConfig((current) => ({ ...current, ...nextConfig }))
+      if (nextConfig.midiOutputName) setMidiOutputs((current) => (
+        current.includes(nextConfig.midiOutputName || '') ? current : [nextConfig.midiOutputName || '', ...current].filter(Boolean)
+      ))
+      if (nextConfig.midiInputName) setMidiInputs((current) => (
+        current.includes(nextConfig.midiInputName || '') ? current : [nextConfig.midiInputName || '', ...current].filter(Boolean)
+      ))
+    })
   }, [nhacApp])
+
+  async function applyRuntimeConfig(saved: typeof config) {
+    if (saved.midiOutputName) {
+      await nhacApp.engineRequest('configure', { midi_output_name: saved.midiOutputName })
+    }
+    if (saved.midiInputName) {
+      await nhacApp.engineRequest('start_midi_feedback', { midi_input_name: saved.midiInputName })
+    }
+  }
 
   async function save(nextConfig = config, showSavedStatus = false) {
     const saved = await nhacApp.saveConfig(nextConfig)
     setConfig((current) => ({ ...current, ...saved }))
     if (showSavedStatus) {
-      if (saved.midiInputName) {
-        await nhacApp.engineRequest('start_midi_feedback', { midi_input_name: saved.midiInputName })
-      }
+      await applyRuntimeConfig({ ...config, ...saved })
       if (!saved.autoLaunchYoutube) {
         await nhacApp.closeYoutube()
       }
