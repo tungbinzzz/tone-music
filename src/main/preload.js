@@ -21,6 +21,12 @@ contextBridge.exposeInMainWorld('nhacApp', {
   readAudioFile: (filePath) => ipcRenderer.invoke('audio:read-file', filePath),
   engineRequest: (command, payload) => ipcRenderer.invoke('engine:request', command, payload),
   stopEngineProcess: () => ipcRenderer.invoke('engine:stop-process'),
+  // License
+  activateLicense: (licenseKey) => ipcRenderer.invoke('license:activate', licenseKey),
+  verifyLicense: () => ipcRenderer.invoke('license:verify'),
+  deactivateLicense: () => ipcRenderer.invoke('license:deactivate'),
+  checkUpdate: (version) => ipcRenderer.invoke('license:check-update', version),
+  getLicenseInfo: () => ipcRenderer.invoke('license:get-info'),
   onYoutubeVideoSelected: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('youtube:video-selected', listener);

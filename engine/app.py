@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import threading
 import time
@@ -6,6 +7,7 @@ import time
 from audio_loopback import RealtimeAnalyzer
 from cubase_midi import list_inputs, list_outputs, mido, resolve_port_name, send_control_cc, send_key_cc, send_transport
 from key_detector import warmup_detector
+from license_guard import init_guard, is_licensed
 
 
 stdout_lock = threading.Lock()
@@ -109,6 +111,10 @@ def handle(request: dict) -> None:
             return
 
         if command == "start_analyzer":
+            if not is_licensed():
+                reply(request_id, ok=False, error="LICENSE_INVALID",
+                      message="License không hợp lệ. Vui lòng kích hoạt ToneLink.")
+                return
             if analyzer is None:
                 analyzer = RealtimeAnalyzer(emit)
             if payload.get("reset_statistics"):
@@ -171,6 +177,10 @@ def warmup_engine() -> None:
 
 
 def main() -> None:
+    # Initialize license guard (skip in dev mode)
+    skip_license = os.environ.get("TONELINK_DEV") == "1"
+    init_guard(skip_check=skip_license)
+
     emit({"type": "ready", "message": "Python engine ready"})
     threading.Thread(target=warmup_engine, name="key-detector-warmup", daemon=True).start()
     for line in sys.stdin:

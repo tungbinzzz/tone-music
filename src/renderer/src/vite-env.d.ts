@@ -65,6 +65,12 @@ declare global {
       readAudioFile: (filePath: string) => Promise<{ ok: boolean; base64?: string; size?: number; error?: string }>
       engineRequest: (command: string, payload?: Record<string, unknown>) => Promise<EngineResponse>
       stopEngineProcess: () => Promise<boolean>
+      // License
+      activateLicense: (licenseKey: string) => Promise<{ valid: boolean; plan?: string; message?: string }>
+      verifyLicense: () => Promise<{ valid: boolean; plan?: string; message?: string; source?: string }>
+      deactivateLicense: () => Promise<{ success: boolean; message?: string }>
+      checkUpdate: (version?: string) => Promise<{ has_update: boolean; latest_version?: string; url?: string; changelog?: string }>
+      getLicenseInfo: () => Promise<{ licenseKey?: string; plan?: string; offlineTokenExp?: string } | null>
       onYoutubeVideoSelected: (callback: (payload: { videoId: string; url: string }) => void) => void | (() => void)
       onYoutubePlaybackState: (callback: (payload: { playing: boolean }) => void) => void | (() => void)
       onEngineEvent: (callback: (payload: EngineEvent) => void) => void | (() => void)

@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const licenseClient = require('./licenseClient');
 
 const APP_ICON = path.join(__dirname, '..', '..', 'src', 'assets', 'logo.png');
 
@@ -568,3 +569,24 @@ ipcMain.handle('window:quit', () => {
 });
 ipcMain.handle('engine:request', (_event, command, payload) => requestEngine(command, payload));
 ipcMain.handle('engine:stop-process', () => stopEngineProcess());
+
+// ─── License IPC handlers ─────────────────────────────────────────────────────
+ipcMain.handle('license:activate', async (_event, licenseKey) => {
+  try { return await licenseClient.activateLicense(app, licenseKey); }
+  catch (e) { return { valid: false, message: e.message }; }
+});
+ipcMain.handle('license:verify', async () => {
+  try { return await licenseClient.verifyLicense(app); }
+  catch (e) { return { valid: false, message: e.message }; }
+});
+ipcMain.handle('license:deactivate', async () => {
+  try { return await licenseClient.deactivateLicense(app); }
+  catch (e) { return { success: false, message: e.message }; }
+});
+ipcMain.handle('license:check-update', async (_event, version) => {
+  try { return await licenseClient.checkUpdate(version || app.getVersion()); }
+  catch (e) { return { has_update: false }; }
+});
+ipcMain.handle('license:get-info', () => {
+  return licenseClient.readLicense(app);
+});
