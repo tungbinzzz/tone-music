@@ -400,16 +400,24 @@ function openLaughWindow() {
 }
 
 function createWindow() {
+  // Check license synchronously so we can set the right window dimensions from creation
+  const hasLicense = (() => {
+    try { return !!licenseClient.readLicense(app); } catch { return false; }
+  })();
+
+  const isLicenseMode = !hasLicense;
+
   mainWindow = new BrowserWindow({
-    width: 620,
-    height: 120,
+    width:  isLicenseMode ? 420 : 620,
+    height: isLicenseMode ? 560 : 120,
     minWidth: 1,
     minHeight: 1,
-    backgroundColor: '#00000000',
+    backgroundColor: isLicenseMode ? '#101317' : '#00000000',
     autoHideMenuBar: true,
     frame: false,
-    transparent: true,
+    transparent: !isLicenseMode,
     resizable: false,
+    show: false,
     icon: APP_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -418,7 +426,12 @@ function createWindow() {
       backgroundThrottling: false
     }
   });
+
   mainWindow.setMenuBarVisibility(false);
+  if (isLicenseMode) mainWindow.center();
+
+  // Show window only when content is ready to avoid white flash
+  mainWindow.once('ready-to-show', () => mainWindow.show());
 
   loadRendererWindow(mainWindow);
 }
@@ -563,25 +576,10 @@ ipcMain.handle('window:set-always-on-top', (_event, flag) => {
   mainWindow.setVisibleOnAllWorkspaces(!!flag);
   return true;
 });
-ipcMain.handle('window:set-license-mode', (_event, isLicense) => {
-  if (!mainWindow || mainWindow.isDestroyed()) return false;
-  if (isLicense) {
-    // Expand for license screen
-    mainWindow.setResizable(true);
-    mainWindow.setSize(420, 560);
-    mainWindow.setResizable(false);
-    mainWindow.setMinimumSize(420, 560);
-    mainWindow.center();
-    mainWindow.setBackgroundColor('#0f1117');
-    mainWindow.setOpacity(1);
-  } else {
-    // Restore toolbar size
-    mainWindow.setResizable(true);
-    mainWindow.setSize(620, 120);
-    mainWindow.setResizable(false);
-    mainWindow.setMinimumSize(1, 1);
-    mainWindow.setBackgroundColor('#00000000');
-  }
+// Relaunch app after license activation so window is recreated with correct toolbar dimensions
+ipcMain.handle('app:relaunch', () => {
+  app.relaunch();
+  app.exit(0);
   return true;
 });
 ipcMain.handle('window:quit', () => {

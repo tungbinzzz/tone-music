@@ -8,7 +8,7 @@ import '../styles.css'
 
 const view = new URLSearchParams(window.location.search).get('view')
 
-// Non-main views don't need license check
+// Sub-windows (settings, laugh) never need license check
 if (view === 'settings' || view === 'laughs') {
   createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
@@ -16,38 +16,32 @@ if (view === 'settings' || view === 'laughs') {
     </React.StrictMode>,
   )
 } else {
-  // Main toolbar view — requires license
   function App() {
     const [licenseState, setLicenseState] = useState<'checking' | 'licensed' | 'unlicensed'>('checking')
-    const [licensedPlan, setLicensedPlan] = useState<string>('standard')
+    const [licensedPlan, setLicensedPlan] = useState('standard')
 
     useEffect(() => {
-      const verify = async () => {
+      ;(async () => {
         try {
           const result = await (window as any).nhacApp?.verifyLicense?.()
           if (result?.valid) {
             setLicensedPlan(result.plan ?? 'standard')
             setLicenseState('licensed')
           } else {
-            // Resize window for license screen
-            await (window as any).nhacApp?.setLicenseMode?.(true)
             setLicenseState('unlicensed')
           }
         } catch {
-          await (window as any).nhacApp?.setLicenseMode?.(true)
           setLicenseState('unlicensed')
         }
-      }
-      verify()
+      })()
     }, [])
 
     if (licenseState === 'checking') {
+      // Window is already the right size (set by main process based on license.json)
+      // Just show a minimal loading indicator
       return (
-        <div className="min-h-screen bg-background flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-            <p className="text-xs text-muted-foreground">Đang kiểm tra license...</p>
-          </div>
+        <div className="w-full h-full flex items-center justify-center bg-background">
+          <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
         </div>
       )
     }
@@ -55,11 +49,9 @@ if (view === 'settings' || view === 'laughs') {
     if (licenseState === 'unlicensed') {
       return (
         <LicenseScreen
-          onLicensed={async (plan) => {
-            // Restore toolbar size before showing main app
-            await (window as any).nhacApp?.setLicenseMode?.(false)
-            setLicensedPlan(plan)
-            setLicenseState('licensed')
+          onLicensed={async () => {
+            // Relaunch so Electron recreates the window as toolbar mode
+            await (window as any).nhacApp?.relaunchApp?.()
           }}
         />
       )
