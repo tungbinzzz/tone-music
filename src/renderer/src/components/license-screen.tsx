@@ -1,215 +1,303 @@
 import { useState } from 'react'
 import logo from '../../../assets/logo.png'
-import { KeyRound, ShieldCheck, ShieldX, Loader2, Wifi, WifiOff, Trash2 } from 'lucide-react'
+import { KeyRound, ShieldCheck, ShieldX, Loader2, WifiOff, X } from 'lucide-react'
 
-type LicenseStatus = 'idle' | 'checking' | 'activating' | 'valid' | 'invalid' | 'offline'
-
-interface LicenseInfo {
-  plan?: string
-  message?: string
-  source?: string
-}
+type Status = 'idle' | 'activating' | 'valid' | 'invalid'
 
 interface LicenseScreenProps {
-  /** Called when a valid license is confirmed */
   onLicensed: (plan: string) => void
 }
 
-const nhacApp = () => window.nhacApp ?? null
-
 export default function LicenseScreen({ onLicensed }: LicenseScreenProps) {
-  const [key, setKey]         = useState('')
-  const [status, setStatus]   = useState<LicenseStatus>('idle')
-  const [info, setInfo]       = useState<LicenseInfo>({})
+  const [key, setKey]       = useState('')
+  const [status, setStatus] = useState<Status>('idle')
+  const [msg, setMsg]       = useState('')
   const [showDeact, setShowDeact] = useState(false)
+
+  const isLoading = status === 'activating'
 
   async function handleActivate() {
     const trimmed = key.trim().toUpperCase()
-    if (!trimmed) return
+    if (!trimmed || isLoading) return
     setStatus('activating')
-    setInfo({})
-
+    setMsg('')
     try {
       const result = await (window as any).nhacApp?.activateLicense?.(trimmed)
       if (result?.valid) {
         setStatus('valid')
-        setInfo({ plan: result.plan, message: result.message })
-        setTimeout(() => onLicensed(result.plan ?? 'standard'), 1200)
+        setMsg(result.message || 'Kích hoạt thành công!')
+        setTimeout(() => onLicensed(result.plan ?? 'standard'), 1400)
       } else {
         setStatus('invalid')
-        setInfo({ message: result?.message || 'Activation failed' })
+        setMsg(result?.message === 'DEVICE_LIMIT_REACHED'
+          ? 'Đã đạt giới hạn số thiết bị'
+          : result?.message === 'License key not found'
+          ? 'Không tìm thấy license key'
+          : result?.message || 'Kích hoạt thất bại')
       }
-    } catch (e: any) {
+    } catch {
       setStatus('invalid')
-      setInfo({ message: 'Cannot connect to license server' })
+      setMsg('Không thể kết nối đến server')
     }
   }
 
   async function handleDeactivate() {
-    setStatus('checking')
     await (window as any).nhacApp?.deactivateLicense?.()
-    setStatus('idle')
-    setInfo({ message: 'Deactivated successfully' })
     setShowDeact(false)
     setKey('')
-  }
-
-  const isLoading = status === 'activating' || status === 'checking'
-
-  const statusBadge = () => {
-    if (status === 'valid') return (
-      <div className="flex items-center gap-2 text-green-400 bg-green-400/10 border border-green-400/20 rounded-lg px-3 py-2 text-sm">
-        <ShieldCheck className="w-4 h-4" />
-        <span>{info.message ?? 'License activated!'}</span>
-      </div>
-    )
-    if (status === 'invalid') return (
-      <div className="flex items-center gap-2 text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2 text-sm">
-        <ShieldX className="w-4 h-4" />
-        <span>{info.message ?? 'Invalid license'}</span>
-      </div>
-    )
-    if (status === 'offline') return (
-      <div className="flex items-center gap-2 text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-lg px-3 py-2 text-sm">
-        <WifiOff className="w-4 h-4" />
-        <span>{info.message ?? 'Offline mode'}</span>
-      </div>
-    )
-    if (info.message && status === 'idle') return (
-      <div className="flex items-center gap-2 text-muted-foreground bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm">
-        <span>{info.message}</span>
-      </div>
-    )
-    return null
+    setStatus('idle')
+    setMsg('Đã hủy kích hoạt thành công')
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Drag region titlebar */}
-      <div className="drag-region flex items-center justify-between px-3 py-2 shrink-0">
-        <span className="text-[10px] text-muted-foreground/50 select-none">ToneLink</span>
+    <div style={{
+      width: '100vw',
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      background: '#0d1117',
+      fontFamily: '"Segoe UI", Arial, sans-serif',
+      color: '#e2e8f0',
+      overflow: 'hidden',
+      position: 'relative',
+    }}>
+
+      {/* Background logo watermark */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        pointerEvents: 'none',
+        zIndex: 0,
+      }}>
+        <img
+          src={logo}
+          alt=""
+          style={{
+            width: 320,
+            height: 320,
+            objectFit: 'cover',
+            opacity: 0.06,
+            filter: 'blur(2px)',
+            borderRadius: 32,
+          }}
+        />
+      </div>
+
+      {/* Titlebar drag region */}
+      <div
+        className="drag-region"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 12px',
+          flexShrink: 0,
+          zIndex: 1,
+        }}
+      >
+        <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.4)', userSelect: 'none' }}>
+          ToneLink · TC Studio
+        </span>
         <button
+          className="no-drag"
           onClick={() => (window as any).nhacApp?.quitApp?.()}
-          className="no-drag p-1 rounded text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-all cursor-pointer"
-          title="Đóng"
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '4px',
+            borderRadius: 4,
+            color: 'rgba(148,163,184,0.4)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#f87171'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(248,113,113,0.1)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(148,163,184,0.4)'; (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
         >
-          <X className="w-3 h-3" />
+          <X size={12} />
         </button>
       </div>
 
-      {/* Centered card */}
-      <div className="flex-1 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
-        {/* Card */}
-        <div className="bg-card border border-border rounded-2xl shadow-2xl overflow-hidden">
-          {/* Header */}
-          <div className="bg-gradient-to-br from-primary/20 via-primary/10 to-transparent px-6 pt-8 pb-6 flex flex-col items-center gap-3">
-            <div
-              className="w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center bg-black shadow-xl"
-              style={{ boxShadow: '0 0 24px 4px rgba(180,140,60,0.4)' }}
-            >
-              <img src={logo} alt="TC Studio" className="w-full h-full object-cover" />
+      {/* Main content */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '0 24px 24px',
+        zIndex: 1,
+      }}>
+        <div style={{ width: '100%', maxWidth: 340 }}>
+
+          {/* Logo + title */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginBottom: 28 }}>
+            <div style={{
+              width: 72,
+              height: 72,
+              borderRadius: 18,
+              overflow: 'hidden',
+              background: '#000',
+              boxShadow: '0 0 30px 6px rgba(180,140,60,0.45)',
+              flexShrink: 0,
+            }}>
+              <img src={logo} alt="TC Studio" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
-            <div className="text-center">
-              <h1 className="text-lg font-bold text-foreground">ToneLink</h1>
-              <p className="text-xs text-muted-foreground mt-0.5">TC Studio · License Activation</p>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#f1f5f9' }}>ToneLink</div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Kích hoạt bản quyền</div>
             </div>
           </div>
 
-          {/* Body */}
-          <div className="px-6 pb-6 space-y-4">
-            {/* License key input */}
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground uppercase tracking-wide">License Key</label>
-              <div className="relative">
-                <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={key}
-                  onChange={e => {
-                    setKey(e.target.value.toUpperCase())
-                    if (status !== 'idle') { setStatus('idle'); setInfo({}) }
-                  }}
-                  onKeyDown={e => { if (e.key === 'Enter' && !isLoading) handleActivate() }}
-                  placeholder="TL-XXXX-XXXX-XXXX"
-                  className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-background border border-border text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/40 font-mono text-sm transition-all"
-                  disabled={isLoading || status === 'valid'}
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-              </div>
+          {/* Card */}
+          <div style={{
+            background: 'rgba(17,24,39,0.85)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 16,
+            padding: '20px 20px 16px',
+            backdropFilter: 'blur(12px)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}>
+
+            {/* Label */}
+            <label style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              License Key
+            </label>
+
+            {/* Input */}
+            <div style={{ position: 'relative' }}>
+              <KeyRound
+                size={15}
+                style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#475569', pointerEvents: 'none' }}
+              />
+              <input
+                type="text"
+                value={key}
+                onChange={e => {
+                  setKey(e.target.value.toUpperCase())
+                  if (status !== 'idle') { setStatus('idle'); setMsg('') }
+                }}
+                onKeyDown={e => { if (e.key === 'Enter') handleActivate() }}
+                placeholder="TL-XXXX-XXXX-XXXX"
+                disabled={isLoading || status === 'valid'}
+                spellCheck={false}
+                autoComplete="off"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '10px 12px 10px 36px',
+                  background: '#0d1117',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 10,
+                  color: '#f1f5f9',
+                  fontFamily: 'Consolas, monospace',
+                  fontSize: 13,
+                  outline: 'none',
+                  transition: 'border-color 0.2s',
+                }}
+                onFocus={e => (e.target.style.borderColor = 'rgba(45,212,191,0.5)')}
+                onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}
+              />
             </div>
 
-            {/* Status badge */}
-            {statusBadge()}
+            {/* Status message */}
+            {msg && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 12px',
+                borderRadius: 8,
+                fontSize: 12,
+                ...(status === 'valid'
+                  ? { background: 'rgba(34,197,94,0.1)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.2)' }
+                  : status === 'invalid'
+                  ? { background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }
+                  : { background: 'rgba(100,116,139,0.1)', color: '#94a3b8', border: '1px solid rgba(100,116,139,0.2)' }
+                ),
+              }}>
+                {status === 'valid' ? <ShieldCheck size={14} /> : status === 'invalid' ? <ShieldX size={14} /> : <WifiOff size={14} />}
+                <span>{msg}</span>
+              </div>
+            )}
 
             {/* Activate button */}
             <button
               onClick={handleActivate}
               disabled={isLoading || !key.trim() || status === 'valid'}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '11px',
+                borderRadius: 10,
+                border: 'none',
+                background: status === 'valid' ? 'rgba(34,197,94,0.2)' : 'rgba(45,212,191,0.85)',
+                color: status === 'valid' ? '#4ade80' : '#0d1117',
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: isLoading || !key.trim() || status === 'valid' ? 'not-allowed' : 'pointer',
+                opacity: !key.trim() && status !== 'valid' ? 0.5 : 1,
+                transition: 'all 0.2s',
+              }}
             >
               {isLoading ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Đang kích hoạt...</>
+                <><Loader2 size={15} className="animate-spin" /> Đang kích hoạt...</>
               ) : status === 'valid' ? (
-                <><ShieldCheck className="w-4 h-4" /> Đã kích hoạt</>
+                <><ShieldCheck size={15} /> Đã kích hoạt!</>
               ) : (
-                <><KeyRound className="w-4 h-4" /> Kích hoạt License</>
+                <><KeyRound size={15} /> Kích hoạt License</>
               )}
             </button>
 
             {/* Divider */}
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center">
-                <span className="bg-card px-2 text-[10px] text-muted-foreground uppercase tracking-wide">Tùy chọn</span>
-              </div>
-            </div>
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', margin: '2px 0' }} />
 
             {/* Deactivate */}
             {!showDeact ? (
               <button
                 onClick={() => setShowDeact(true)}
-                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-border text-muted-foreground text-xs hover:border-destructive/50 hover:text-destructive transition-all"
+                style={{
+                  background: 'none',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  borderRadius: 8,
+                  color: '#475569',
+                  fontSize: 11,
+                  padding: '7px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#f87171'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(248,113,113,0.3)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#475569'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.07)'; }}
               >
-                <Trash2 className="w-3 h-3" />
                 Hủy kích hoạt máy này
               </button>
             ) : (
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground text-center">Xác nhận hủy kích hoạt machine này?</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowDeact(false)}
-                    className="flex-1 py-1.5 rounded-lg border border-border text-muted-foreground text-xs hover:bg-muted transition-all"
-                  >
-                    Hủy
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <p style={{ fontSize: 11, color: '#64748b', textAlign: 'center', margin: 0 }}>Xác nhận hủy kích hoạt?</p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setShowDeact(false)} style={{ flex: 1, padding: '7px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'none', color: '#64748b', fontSize: 11, cursor: 'pointer' }}>
+                    Hủy bỏ
                   </button>
-                  <button
-                    onClick={handleDeactivate}
-                    className="flex-1 py-1.5 rounded-lg bg-destructive/15 text-destructive text-xs font-medium hover:bg-destructive/25 transition-all"
-                  >
-                    Xác nhận xóa
+                  <button onClick={handleDeactivate} style={{ flex: 1, padding: '7px', borderRadius: 8, border: 'none', background: 'rgba(239,68,68,0.15)', color: '#f87171', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                    Xác nhận
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Footer note */}
-            <p className="text-[10px] text-muted-foreground/60 text-center leading-relaxed">
-              License được kiểm tra khi khởi động.<br />
-              Offline hoạt động trong 7 ngày sau lần verify cuối.
+            {/* Footer */}
+            <p style={{ fontSize: 10, color: '#334155', textAlign: 'center', margin: 0, lineHeight: 1.5 }}>
+              Cần internet để kích hoạt lần đầu · Offline 7 ngày
             </p>
           </div>
         </div>
-
-        {/* Offline hint */}
-        <p className="text-center text-[10px] text-muted-foreground/40 mt-3 flex items-center justify-center gap-1">
-          <Wifi className="w-3 h-3" /> Cần internet để kích hoạt lần đầu
-        </p>
-      </div>
       </div>
     </div>
   )
