@@ -68,7 +68,7 @@ def _verify_online(license_data: dict) -> bool:
 
         server_url = os.environ.get(
             "LICENSE_SERVER_URL",
-            "https://your-license-server.railway.app"
+            "https://tone-music-production.up.railway.app"
         )
         url = f"{server_url}/license/verify"
         payload = json.dumps({

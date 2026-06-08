@@ -7,7 +7,7 @@ const https = require('https');
 const http = require('http');
 
 // Replace with your Railway URL after deploy
-const LICENSE_SERVER_URL = process.env.LICENSE_SERVER_URL || 'https://your-license-server.railway.app';
+const LICENSE_SERVER_URL = process.env.LICENSE_SERVER_URL || 'https://tone-music-production.up.railway.app';
 const LICENSE_TIMEOUT_MS = 8000;
 
 /**
