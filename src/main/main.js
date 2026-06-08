@@ -563,6 +563,27 @@ ipcMain.handle('window:set-always-on-top', (_event, flag) => {
   mainWindow.setVisibleOnAllWorkspaces(!!flag);
   return true;
 });
+ipcMain.handle('window:set-license-mode', (_event, isLicense) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  if (isLicense) {
+    // Expand for license screen
+    mainWindow.setResizable(true);
+    mainWindow.setSize(420, 560);
+    mainWindow.setResizable(false);
+    mainWindow.setMinimumSize(420, 560);
+    mainWindow.center();
+    mainWindow.setBackgroundColor('#0f1117');
+    mainWindow.setOpacity(1);
+  } else {
+    // Restore toolbar size
+    mainWindow.setResizable(true);
+    mainWindow.setSize(620, 120);
+    mainWindow.setResizable(false);
+    mainWindow.setMinimumSize(1, 1);
+    mainWindow.setBackgroundColor('#00000000');
+  }
+  return true;
+});
 ipcMain.handle('window:quit', () => {
   app.quit();
   return true;

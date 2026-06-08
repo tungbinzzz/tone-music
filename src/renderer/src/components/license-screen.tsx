@@ -84,7 +84,21 @@ export default function LicenseScreen({ onLicensed }: LicenseScreenProps) {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Drag region titlebar */}
+      <div className="drag-region flex items-center justify-between px-3 py-2 shrink-0">
+        <span className="text-[10px] text-muted-foreground/50 select-none">ToneLink</span>
+        <button
+          onClick={() => (window as any).nhacApp?.quitApp?.()}
+          className="no-drag p-1 rounded text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-all cursor-pointer"
+          title="Đóng"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* Centered card */}
+      <div className="flex-1 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         {/* Card */}
         <div className="bg-card border border-border rounded-2xl shadow-2xl overflow-hidden">
@@ -195,6 +209,7 @@ export default function LicenseScreen({ onLicensed }: LicenseScreenProps) {
         <p className="text-center text-[10px] text-muted-foreground/40 mt-3 flex items-center justify-center gap-1">
           <Wifi className="w-3 h-3" /> Cần internet để kích hoạt lần đầu
         </p>
+      </div>
       </div>
     </div>
   )

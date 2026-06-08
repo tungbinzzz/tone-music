@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('nhacApp', {
   setMainWindowSize: (width, height) => ipcRenderer.invoke('window:set-main-size', width, height),
   minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
   setAlwaysOnTop: (flag) => ipcRenderer.invoke('window:set-always-on-top', flag),
+  setLicenseMode: (isLicense) => ipcRenderer.invoke('window:set-license-mode', isLicense),
   minimizeCurrentWindow: () => ipcRenderer.invoke('window:minimize-current'),
   quitApp: () => ipcRenderer.invoke('window:quit'),
   selectAudioFile: () => ipcRenderer.invoke('dialog:open-audio'),

@@ -29,9 +29,12 @@ if (view === 'settings' || view === 'laughs') {
             setLicensedPlan(result.plan ?? 'standard')
             setLicenseState('licensed')
           } else {
+            // Resize window for license screen
+            await (window as any).nhacApp?.setLicenseMode?.(true)
             setLicenseState('unlicensed')
           }
         } catch {
+          await (window as any).nhacApp?.setLicenseMode?.(true)
           setLicenseState('unlicensed')
         }
       }
@@ -52,7 +55,9 @@ if (view === 'settings' || view === 'laughs') {
     if (licenseState === 'unlicensed') {
       return (
         <LicenseScreen
-          onLicensed={(plan) => {
+          onLicensed={async (plan) => {
+            // Restore toolbar size before showing main app
+            await (window as any).nhacApp?.setLicenseMode?.(false)
             setLicensedPlan(plan)
             setLicenseState('licensed')
           }}
