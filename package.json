@@ -33,6 +33,10 @@
         "to": "engine/tonelink-engine.exe"
       },
       {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      },
+      {
         "from": "generic_remote",
         "to": "generic_remote"
       },

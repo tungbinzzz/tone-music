@@ -96,7 +96,13 @@ const fallbackNhacApp: Window['nhacApp'] = {
   onConfigChanged: () => {},
   minimizeWindow: async () => false,
   setAlwaysOnTop: async () => false,
+  relaunchApp: async () => false,
   quitApp: async () => false,
+  activateLicense: async () => ({ valid: false, message: 'No IPC' }),
+  verifyLicense: async () => ({ valid: false, message: 'No IPC' }),
+  deactivateLicense: async () => ({ success: false }),
+  checkUpdate: async () => ({ has_update: false }),
+  getLicenseInfo: async () => null,
 }
 
 type VolumeControlProps = {

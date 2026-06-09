@@ -59,6 +59,7 @@ declare global {
       setMainWindowSize: (width: number, height: number) => Promise<boolean>
       minimizeWindow: () => Promise<boolean>
       setAlwaysOnTop: (flag: boolean) => Promise<boolean>
+      relaunchApp: () => Promise<boolean>
       minimizeCurrentWindow: () => Promise<boolean>
       quitApp: () => Promise<boolean>
       selectAudioFile: () => Promise<string | null>

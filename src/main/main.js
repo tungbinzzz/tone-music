@@ -4,7 +4,10 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const licenseClient = require('./licenseClient');
 
-const APP_ICON = path.join(__dirname, '..', '..', 'src', 'assets', 'logo.png');
+// Icon path: use build/icon.png in dev, resources/icon.png when packaged
+const APP_ICON = app.isPackaged
+  ? path.join(process.resourcesPath, 'icon.png')
+  : path.join(__dirname, '..', '..', 'build', 'icon.png');
 
 const DEFAULT_CONFIG = {
   youtubeUrl: 'https://www.youtube.com',

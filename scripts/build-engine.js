@@ -35,6 +35,12 @@ const args = [
   'mido.backends.rtmidi',
   '--hidden-import',
   'rtmidi',
+  '--hidden-import',
+  'license_guard',
+  '--hidden-import',
+  'urllib.request',
+  '--hidden-import',
+  'urllib.error',
   entryPath,
 ];
 
