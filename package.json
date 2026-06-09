@@ -1,7 +1,7 @@
 {
-  "name": "cubase-youtube-tone-assistant",
+  "name": "tc-studio",
   "version": "0.1.0",
-  "description": "Electron UI with Python/librosa engine for realtime YouTube tone detection and basic Cubase control.",
+  "description": "TC Studio — Realtime YouTube tone detection and Cubase control.",
   "main": "src/main/main.js",
   "scripts": {
     "start": "node scripts/dev.js",
@@ -15,8 +15,8 @@
     "install:cubase-remote": "powershell -ExecutionPolicy Bypass -File scripts/install-cubase-midi-remote.ps1"
   },
   "build": {
-    "appId": "com.tonelink.app",
-    "productName": "ToneLink",
+    "appId": "com.tcstudio.app",
+    "productName": "TC Studio",
     "electronDist": "node_modules/electron/dist",
     "directories": {
       "output": "release-fixed"

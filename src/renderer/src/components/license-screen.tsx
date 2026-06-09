@@ -161,7 +161,7 @@ export default function LicenseScreen({ onLicensed }: LicenseScreenProps) {
         }}
       >
         <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.4)', userSelect: 'none' }}>
-          ToneLink · TC Studio
+          TC Studio
         </span>
         <button
           className="no-drag"
@@ -208,7 +208,7 @@ export default function LicenseScreen({ onLicensed }: LicenseScreenProps) {
               <img src={logo} alt="TC Studio" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#f1f5f9' }}>ToneLink</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#f1f5f9' }}>TC Studio</div>
               <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Kích hoạt bản quyền</div>
             </div>
           </div>
@@ -237,7 +237,7 @@ export default function LicenseScreen({ onLicensed }: LicenseScreenProps) {
                 style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#475569', pointerEvents: 'none' }}
               />
               <input
-                type="text"
+                type="password"
                 value={key}
                 onChange={e => {
                   setKey(e.target.value.toUpperCase())

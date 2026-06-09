@@ -766,7 +766,7 @@ export default function ToneLinkAssistant() {
 
   async function exportPreset() {
     await nhacApp.exportPreset({
-      name: `ToneLink preset ${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`,
+      name: `TC Studio preset ${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`,
       version: 1,
       controls: { ...controls, ...volumes, ...effects, pitchShift, returnSpeed },
     })

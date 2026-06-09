@@ -96,7 +96,7 @@ export default function SplashScreen() {
           color: '#f1f5f9',
           letterSpacing: '0.05em',
         }}>
-          ToneLink
+          TC Studio
         </div>
         <div style={{
           fontSize: 11,
@@ -105,7 +105,7 @@ export default function SplashScreen() {
           letterSpacing: '0.15em',
           textTransform: 'uppercase',
         }}>
-          TC Studio
+          Tone Detection Studio
         </div>
       </div>
 

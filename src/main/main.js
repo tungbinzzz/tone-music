@@ -13,8 +13,8 @@ const DEFAULT_CONFIG = {
   youtubeUrl: 'https://www.youtube.com',
   cubasePath: '',
   pythonPath: process.platform === 'win32' ? 'python' : 'python3',
-  midiOutputName: 'ToneLink To Cubase',
-  midiInputName: 'ToneLink From Cubase',
+  midiOutputName: 'TC Studio To Cubase',
+  midiInputName: 'TC Studio From Cubase',
   micVolume: 90,
   cubaseVolume: 64,
   send1Level: 0,
@@ -350,7 +350,7 @@ function openSettingsWindow() {
     height: 330,
     minWidth: 300,
     minHeight: 300,
-    title: 'ToneLink Settings',
+    title: 'TC Studio Settings',
     backgroundColor: '#101317',
     autoHideMenuBar: true,
     frame: false,
@@ -381,7 +381,7 @@ function openLaughWindow() {
     height: 420,
     minWidth: 350,
     minHeight: 380,
-    title: 'ToneLink Laughs',
+    title: 'TC Studio Laughs',
     backgroundColor: '#101317',
     autoHideMenuBar: true,
     frame: false,
@@ -533,9 +533,9 @@ ipcMain.handle('app:launch-cubase', (_event, cubasePath) => {
 
 ipcMain.handle('preset:export', async (_event, preset) => {
   const result = await dialog.showSaveDialog(mainWindow, {
-    title: 'Save ToneLink preset',
-    defaultPath: `${preset?.name || 'tonelink-preset'}.json`,
-    filters: [{ name: 'ToneLink Preset', extensions: ['json'] }]
+    title: 'Save TC Studio preset',
+    defaultPath: `${preset?.name || 'tc-studio-preset'}.json`,
+    filters: [{ name: 'TC Studio Preset', extensions: ['json'] }]
   });
 
   if (result.canceled || !result.filePath) {
@@ -548,8 +548,8 @@ ipcMain.handle('preset:export', async (_event, preset) => {
 
 ipcMain.handle('preset:import', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Import ToneLink preset',
-    filters: [{ name: 'ToneLink Preset', extensions: ['json'] }],
+    title: 'Import TC Studio preset',
+    filters: [{ name: 'TC Studio Preset', extensions: ['json'] }],
     properties: ['openFile']
   });
 

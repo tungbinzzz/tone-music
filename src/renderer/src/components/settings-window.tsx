@@ -109,7 +109,7 @@ export default function SettingsWindow() {
       <div className="bg-card border border-border rounded-xl shadow-xl overflow-hidden">
         <div className="drag-region flex items-center justify-between border-b border-border px-3 py-2">
           <div>
-            <h1 className="text-sm font-bold leading-tight">Cài đặt ToneLink</h1>
+            <h1 className="text-sm font-bold leading-tight">Cài đặt TC Studio</h1>
             <p className="text-[10px] text-muted-foreground">Cấu hình MIDI và ứng dụng</p>
           </div>
           <button
