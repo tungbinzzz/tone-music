@@ -62,6 +62,68 @@ export default function LicenseScreen({ onLicensed }: LicenseScreenProps) {
       position: 'relative',
     }}>
 
+      {/* Activating overlay */}
+      {isLoading && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 100,
+          background: 'rgba(13,17,23,0.97)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 24,
+          animation: 'fadeIn 0.3s ease',
+        }}>
+          {/* Spinning logo */}
+          <div style={{ position: 'relative', width: 90, height: 90 }}>
+            {/* Outer spinning ring */}
+            <div style={{
+              position: 'absolute', inset: -8,
+              borderRadius: '50%',
+              border: '2px solid transparent',
+              borderTopColor: 'rgba(180,140,60,0.9)',
+              borderRightColor: 'rgba(180,140,60,0.3)',
+              animation: 'spin 1s linear infinite',
+            }} />
+            {/* Inner spinning ring */}
+            <div style={{
+              position: 'absolute', inset: -16,
+              borderRadius: '50%',
+              border: '1px solid transparent',
+              borderTopColor: 'rgba(180,140,60,0.3)',
+              animation: 'spin 1.5s linear infinite reverse',
+            }} />
+            {/* Logo */}
+            <div style={{
+              width: 90, height: 90, borderRadius: 20, overflow: 'hidden',
+              background: '#000',
+              boxShadow: '0 0 30px 8px rgba(180,140,60,0.4)',
+            }}>
+              <img src={logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#f1f5f9' }}>Đang kích hoạt...</div>
+            <div style={{ fontSize: 11, color: '#475569', marginTop: 6 }}>Vui lòng chờ</div>
+          </div>
+          {/* Animated dots */}
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[0,1,2].map(i => (
+              <div key={i} style={{
+                width: 5, height: 5, borderRadius: '50%',
+                background: 'rgba(180,140,60,0.7)',
+                animation: `dotBounce 1.2s ease-in-out infinite ${i * 0.2}s`,
+              }} />
+            ))}
+          </div>
+          <style>{`
+            @keyframes spin { to { transform: rotate(360deg); } }
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes dotBounce {
+              0%,80%,100% { transform: translateY(0); opacity: 0.4; }
+              40% { transform: translateY(-6px); opacity: 1; }
+            }
+          `}</style>
+        </div>
+      )}
+
       {/* Background logo watermark */}
       <div style={{
         position: 'absolute',

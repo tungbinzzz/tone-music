@@ -24,6 +24,7 @@ const DEFAULT_CONFIG = {
 };
 
 let mainWindow;
+let splashWindow;
 let youtubeWindow;
 let settingsWindow;
 let laughWindow;
@@ -433,15 +434,55 @@ function createWindow() {
   mainWindow.setMenuBarVisibility(false);
   if (isLicenseMode) mainWindow.center();
 
-  // Show window only when content is ready to avoid white flash
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  // When main content ready: close splash then reveal main window
+  mainWindow.once('ready-to-show', () => {
+    const showMain = () => {
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.close();
+        splashWindow = null;
+      }
+      mainWindow.show();
+    };
+    // Guarantee splash shows for at least 2.5s
+    const elapsed = Date.now() - splashStartTime;
+    const remaining = Math.max(0, 2500 - elapsed);
+    setTimeout(showMain, remaining);
+  });
 
   loadRendererWindow(mainWindow);
 }
 
+let splashStartTime = Date.now();
+
+function createSplashWindow() {
+  splashStartTime = Date.now();
+  splashWindow = new BrowserWindow({
+    width: 300,
+    height: 320,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    center: true,
+    show: false,
+    icon: APP_ICON,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    }
+  });
+  splashWindow.once('ready-to-show', () => {
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.show();
+  });
+  loadRendererWindow(splashWindow, '?view=splash');
+}
+
 app.whenReady().then(() => {
   const config = loadConfig();
-  createWindow();
+  createSplashWindow();  // Show splash first
+  createWindow();        // Load main window in background
 
   if (config.autoLaunchYoutube) openYoutubeWindow(config.youtubeUrl);
   if (config.autoLaunchCubase) launchCubase(config.cubasePath);

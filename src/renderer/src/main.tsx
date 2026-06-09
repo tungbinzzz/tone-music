@@ -4,17 +4,17 @@ import ToneLinkAssistant from './components/tonelink-assistant'
 import SettingsWindow from './components/settings-window'
 import LaughWindow from './components/laugh-window'
 import LicenseScreen from './components/license-screen'
+import SplashScreen from './components/splash-screen'
 import '../styles.css'
 
 const view = new URLSearchParams(window.location.search).get('view')
 
-// Sub-windows (settings, laugh) never need license check
-if (view === 'settings' || view === 'laughs') {
-  createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
-      {view === 'settings' ? <SettingsWindow /> : <LaughWindow />}
-    </React.StrictMode>,
-  )
+if (view === 'settings') {
+  createRoot(document.getElementById('root')!).render(<React.StrictMode><SettingsWindow /></React.StrictMode>)
+} else if (view === 'laughs') {
+  createRoot(document.getElementById('root')!).render(<React.StrictMode><LaughWindow /></React.StrictMode>)
+} else if (view === 'splash') {
+  createRoot(document.getElementById('root')!).render(<React.StrictMode><SplashScreen /></React.StrictMode>)
 } else {
   function App() {
     const [licenseState, setLicenseState] = useState<'checking' | 'licensed' | 'unlicensed'>('checking')
