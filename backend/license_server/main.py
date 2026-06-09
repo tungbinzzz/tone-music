@@ -1,6 +1,10 @@
 import logging
-from fastapi import FastAPI, Query
+import secrets
+import string
+from typing import Optional
+from fastapi import FastAPI, Query, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from schemas import ActivateRequest, VerifyRequest, DeactivateRequest
 from license_service import activate_license, verify_license, deactivate_license
 from config import settings
@@ -93,3 +97,121 @@ def check_update(
         "changelog": None,
         "is_required": False,
     }
+
+
+# ─── Admin endpoints ──────────────────────────────────────────────────────────
+# All admin endpoints require header: X-Admin-Key: <ADMIN_SECRET>
+
+def require_admin(x_admin_key: str = Header(...)):
+    if not secrets.compare_digest(x_admin_key, settings.ADMIN_SECRET):
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+
+
+class CreateLicenseRequest(BaseModel):
+    plan: str = "standard"
+    max_devices: int = 1
+    expires_days: Optional[int] = None   # None = lifetime
+    note: Optional[str] = None           # internal note, stored as user name
+
+
+def _generate_key() -> str:
+    """Generate key format: TC-XXXX-XXXX-XXXX"""
+    chars = string.ascii_uppercase + string.digits
+    parts = ["".join(secrets.choice(chars) for _ in range(4)) for _ in range(3)]
+    return "TC-" + "-".join(parts)
+
+
+@app.post("/admin/create-license", tags=["Admin"])
+def admin_create_license(
+    req: CreateLicenseRequest,
+    x_admin_key: str = Header(...),
+):
+    require_admin(x_admin_key)
+    supabase = __import__("supabase_client").get_supabase()
+
+    # Generate unique key
+    for _ in range(10):
+        key = _generate_key()
+        exists = supabase.table("licenses").select("id").eq("license_key", key).execute()
+        if not exists.data:
+            break
+
+    expires_at = None
+    if req.expires_days:
+        from datetime import datetime, timedelta, timezone
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=req.expires_days)).isoformat()
+
+    # Create user record if note provided
+    user_id = None
+    if req.note:
+        user_res = supabase.table("users").insert({
+            "email": f"{key.lower()}@tcstudio.internal",
+            "name": req.note,
+        }).execute()
+        if user_res.data:
+            user_id = user_res.data[0]["id"]
+
+    supabase.table("licenses").insert({
+        "license_key": key,
+        "plan": req.plan,
+        "status": "active",
+        "max_devices": req.max_devices,
+        "expires_at": expires_at,
+        "user_id": user_id,
+    }).execute()
+
+    logger.info(f"Admin created license: {key} plan={req.plan} devices={req.max_devices}")
+    return {
+        "license_key": key,
+        "plan": req.plan,
+        "max_devices": req.max_devices,
+        "expires_at": expires_at,
+        "note": req.note,
+    }
+
+
+@app.get("/admin/licenses", tags=["Admin"])
+def admin_list_licenses(
+    x_admin_key: str = Header(...),
+    limit: int = Query(default=50, le=200),
+):
+    require_admin(x_admin_key)
+    supabase = __import__("supabase_client").get_supabase()
+    res = supabase.table("licenses").select(
+        "id, license_key, plan, status, max_devices, expires_at, created_at, user_id, users(name)"
+    ).order("created_at", desc=True).limit(limit).execute()
+
+    licenses = []
+    for lic in (res.data or []):
+        act_res = supabase.table("activations").select("machine_id, machine_name, last_seen") \
+            .eq("license_id", lic["id"]).execute()
+        licenses.append({
+            **lic,
+            "activations": act_res.data or [],
+            "active_devices": len(act_res.data or []),
+        })
+    return {"total": len(licenses), "licenses": licenses}
+
+
+@app.post("/admin/revoke/{license_key}", tags=["Admin"])
+def admin_revoke_license(license_key: str, x_admin_key: str = Header(...)):
+    require_admin(x_admin_key)
+    supabase = __import__("supabase_client").get_supabase()
+    res = supabase.table("licenses").update({"status": "revoked"}) \
+        .eq("license_key", license_key).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="License not found")
+    logger.info(f"Admin revoked license: {license_key}")
+    return {"success": True, "license_key": license_key, "status": "revoked"}
+
+
+@app.post("/admin/restore/{license_key}", tags=["Admin"])
+def admin_restore_license(license_key: str, x_admin_key: str = Header(...)):
+    require_admin(x_admin_key)
+    supabase = __import__("supabase_client").get_supabase()
+    res = supabase.table("licenses").update({"status": "active"}) \
+        .eq("license_key", license_key).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="License not found")
+    return {"success": True, "license_key": license_key, "status": "active"}
+
