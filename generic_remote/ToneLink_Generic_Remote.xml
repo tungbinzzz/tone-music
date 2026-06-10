@@ -30,19 +30,19 @@
 <value><device>VST Mixer</device><chan>1</chan><name>monitor</name><flags>0</flags></value>
 </entry>
 <entry ctrl="remix">
-<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot3:on</name><flags>0</flags></value>
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot15:on</name><flags>0</flags></value>
 </entry>
 <entry ctrl="tatvang">
 <value><device>VST Mixer</device><chan>1</chan><name>sends:bypass</name><flags>0</flags></value>
 </entry>
 <entry ctrl="lofi">
-<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot2:on</name><flags>0</flags></value>
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot16:on</name><flags>0</flags></value>
 </entry>
 <entry ctrl="tat_bat_tang_tong">
 <value><device>VST Mixer</device><chan>0</chan><name>inserts/slot1:on</name><flags>0</flags></value>
 </entry>
 <entry ctrl="tat_tune">
-<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot1:on</name><flags>0</flags></value>
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot2:on</name><flags>0</flags></value>
 </entry>
 <entry ctrl="volumbeat">
 <value><device>VST Mixer</device><chan>0</chan><name>volume</name><flags>0</flags></value>
@@ -54,7 +54,7 @@
 <value><device>VST Mixer</device><chan>1</chan><name>sends/slot1:volume</name><flags>0</flags></value>
 </entry>
 <entry ctrl="return_speed">
-<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot1:param4</name><flags>0</flags></value>
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot2:param4</name><flags>0</flags></value>
 </entry>
 <entry ctrl="tang_tong">
 <value><device>VST Mixer</device><chan>0</chan><name>inserts/slot1:param4</name><flags>0</flags></value>
@@ -66,19 +66,19 @@
 <value><device>VST Mixer</device><chan>1</chan><name>sends/slot3:volume</name><flags>0</flags></value>
 </entry>
 <entry ctrl="be">
-<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot1:param152</name><flags>0</flags></value>
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot2:param152</name><flags>0</flags></value>
 </entry>
 <entry ctrl="flex_tune">
-<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot1:param90</name><flags>0</flags></value>
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot2:param90</name><flags>0</flags></value>
 </entry>
 <entry ctrl="auto_key">
 <value><device>VST Mixer</device><chan>0</chan><name>inserts/slot2:edit</name><flags>0</flags></value>
 </entry>
 <entry ctrl="key">
-<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot1:param2</name><flags>0</flags></value>
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot2:param2</name><flags>0</flags></value>
 </entry>
 <entry ctrl="scale">
-<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot1:param1</name><flags>0</flags></value>
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot2:param1</name><flags>0</flags></value>
 </entry>
 </bank>
 </remotedescription>
