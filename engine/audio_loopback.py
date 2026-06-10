@@ -30,8 +30,10 @@ class RealtimeAnalyzer:
         self.mode = mode
         self.min_main_key_votes = min_main_key_votes
         self.vote_confidence_threshold = vote_confidence_threshold
-        self._key_scores: dict[str, float] = {}
+        
         self._key_votes = 0
+        self.max_history = 30  # Store last 15 seconds of history (30 frames * 0.5s)
+        self._history: list[tuple[str, float]] = []
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
 
@@ -50,19 +52,28 @@ class RealtimeAnalyzer:
         self._thread.start()
 
     def reset_statistics(self) -> None:
-        self._key_scores = {}
+        self._history = []
         self._key_votes = 0
 
     def _track_main_key(self, key_name: str, confidence: float) -> tuple[str, float]:
         if key_name != "--" and confidence >= self.vote_confidence_threshold:
-            self._key_scores[key_name] = self._key_scores.get(key_name, 0.0) + confidence
-            self._key_votes += 1
+            self._history.append((key_name, confidence))
+            if len(self._history) > self.max_history:
+                self._history.pop(0)
 
-        if self._key_votes < self.min_main_key_votes or not self._key_scores:
+        self._key_votes = len(self._history)
+        if self._key_votes < self.min_main_key_votes:
             return "--", 0.0
 
-        total_score = sum(self._key_scores.values())
-        main_key, main_score = max(self._key_scores.items(), key=lambda item: item[1])
+        scores: dict[str, float] = {}
+        for k, conf in self._history:
+            scores[k] = scores.get(k, 0.0) + conf
+
+        if not scores:
+            return "--", 0.0
+
+        total_score = sum(scores.values())
+        main_key, main_score = max(scores.items(), key=lambda item: item[1])
         main_confidence = main_score / total_score if total_score > 0 else 0.0
         return main_key, main_confidence
 
