@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -49,16 +49,27 @@ function getDefaultConfig() {
 
 function normalizeConfig(config) {
   const defaults = getDefaultConfig();
-  const configuredPython = config.pythonPath || defaults.pythonPath;
+
+  // Read existing file to use as fallback for missing/empty values
+  let existing = {};
+  try {
+    const raw = fs.readFileSync(getConfigPath(), 'utf8');
+    existing = JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+
+  const configuredPython = config.pythonPath || existing.pythonPath || defaults.pythonPath;
   const pythonPath = configuredPython === DEFAULT_CONFIG.pythonPath ? defaults.pythonPath : configuredPython;
 
   return {
     ...defaults,
+    ...existing,
     ...config,
-    midiOutputName: config.midiOutputName || defaults.midiOutputName,
-    midiInputName: config.midiInputName || defaults.midiInputName,
+    midiOutputName: config.midiOutputName || existing.midiOutputName || defaults.midiOutputName,
+    midiInputName: config.midiInputName || existing.midiInputName || defaults.midiInputName,
     pythonPath,
-    youtubeUrl: config.youtubeUrl || defaults.youtubeUrl
+    youtubeUrl: config.youtubeUrl || existing.youtubeUrl || defaults.youtubeUrl
   };
 }
 
@@ -209,11 +220,18 @@ function launchCubase(cubasePath) {
     return;
   }
   try {
-    spawn(cubasePath, [], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true
-    }).unref();
+    const ext = path.extname(cubasePath).toLowerCase();
+    if (ext === '.exe') {
+      spawn(cubasePath, [], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      }).unref();
+    } else {
+      shell.openPath(cubasePath).catch((err) => {
+        emitToRenderer('engine:log', { level: 'error', text: `Cannot open Cubase project: ${err.message}` });
+      });
+    }
   } catch (error) {
     emitToRenderer('engine:log', { level: 'error', text: `Cannot launch Cubase: ${error.message}` });
   }
@@ -249,75 +267,61 @@ function openYoutubeWindow(url) {
 
   if (youtubeWindow && !youtubeWindow.isDestroyed()) {
     youtubeWindow.focus();
-    if (targetUrl) youtubeWindow.loadURL(targetUrl);
+    if (targetUrl) {
+      loadRendererWindow(youtubeWindow, `?view=youtube&url=${encodeURIComponent(targetUrl)}`);
+    }
     return true;
   }
 
   youtubeWindow = new BrowserWindow({
-    width: 700,
-    height: 420,
+    width: 800,
+    height: 540,
     minWidth: 700,
     minHeight: 420,
     title: 'YouTube - TC Studio',
     backgroundColor: '#111111',
     autoHideMenuBar: true,
-    frame: false,
+    frame: true,
     icon: APP_ICON,
     webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      backgroundThrottling: false
+      backgroundThrottling: false,
+      webviewTag: true
     }
   });
 
-  youtubeWindow.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
-    youtubeWindow.loadURL(nextUrl);
-    return { action: 'deny' };
-  });
-
-  youtubeWindow.webContents.on('did-navigate', (_event, nextUrl) => handleYoutubeUrl(nextUrl));
-  youtubeWindow.webContents.on('did-navigate-in-page', (_event, nextUrl) => handleYoutubeUrl(nextUrl));
-  youtubeWindow.webContents.on('did-finish-load', () => handleYoutubeUrl(youtubeWindow.webContents.getURL()));
-  youtubeWindow.webContents.on('dom-ready', () => {
-    youtubeWindow.webContents.insertCSS(`
-      html::before {
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 28px;
-        z-index: 2147483647;
-        -webkit-app-region: drag;
-      }
-    `).catch(() => {});
-  });
-
-  // Poll video play/pause state every second
-  let lastPlayingState = null;
-  const playbackPoller = setInterval(async () => {
-    if (!youtubeWindow || youtubeWindow.isDestroyed()) {
-      clearInterval(playbackPoller);
-      return;
-    }
-    try {
-      const playing = await youtubeWindow.webContents.executeJavaScript(
-        '(function(){ var v = document.querySelector("video"); return v ? !v.paused && !v.ended && v.readyState > 2 : false; })()'
-      );
-      if (playing !== lastPlayingState) {
-        lastPlayingState = playing;
-        emitToRenderer('youtube:playback-state', { playing });
-      }
-    } catch (_) { /* page not ready */ }
-  }, 1000);
+  // const youtubeMenu = Menu.buildFromTemplate([
+  //   {
+  //     label: 'Cửa sổ',
+  //     submenu: [
+  //       {
+  //         label: 'Luôn ở trên cùng (Ghim)',
+  //         type: 'checkbox',
+  //         checked: false,
+  //         accelerator: 'CmdOrCtrl+T',
+  //         click: (menuItem) => {
+  //           if (youtubeWindow && !youtubeWindow.isDestroyed()) {
+  //             youtubeWindow.setAlwaysOnTop(menuItem.checked);
+  //           }
+  //         }
+  //       },
+  //       { type: 'separator' },
+  //       { label: 'Tải lại trang', role: 'reload' },
+  //       { label: 'Thu nhỏ', role: 'minimize' },
+  //       { label: 'Đóng', role: 'close' }
+  //     ]
+  //   }
+  // ]);
+  // youtubeWindow.setMenu(youtubeMenu);
 
   youtubeWindow.on('closed', () => {
-    clearInterval(playbackPoller);
     emitToRenderer('youtube:playback-state', { playing: false });
     youtubeWindow = undefined;
   });
 
-  youtubeWindow.loadURL(targetUrl);
+  loadRendererWindow(youtubeWindow, `?view=youtube&url=${encodeURIComponent(targetUrl)}`);
   return true;
 }
 
@@ -513,8 +517,8 @@ ipcMain.handle('config:save', (_event, config) => {
 
 ipcMain.handle('dialog:select-cubase', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Select Cubase executable',
-    filters: [{ name: 'Executable', extensions: ['exe'] }],
+    title: 'Select Cubase executable or project file',
+    filters: [{ name: 'Cubase Files (*.exe, *.cpr, *.prj)', extensions: ['exe', 'cpr', 'prj'] }],
     properties: ['openFile']
   });
   return result.canceled ? '' : result.filePaths[0];
@@ -525,6 +529,42 @@ ipcMain.handle('app:launch-youtube', async (_event, url) => {
 });
 
 ipcMain.handle('app:close-youtube', async () => closeYoutubeWindow());
+
+ipcMain.on('youtube:minimize', () => {
+  if (youtubeWindow && !youtubeWindow.isDestroyed()) {
+    youtubeWindow.minimize();
+  }
+});
+
+ipcMain.on('youtube:close', () => {
+  if (youtubeWindow && !youtubeWindow.isDestroyed()) {
+    youtubeWindow.close();
+  }
+});
+
+ipcMain.handle('youtube:toggle-pin', () => {
+  if (youtubeWindow && !youtubeWindow.isDestroyed()) {
+    const isAlwaysOnTop = !youtubeWindow.isAlwaysOnTop();
+    youtubeWindow.setAlwaysOnTop(isAlwaysOnTop);
+    return isAlwaysOnTop;
+  }
+  return false;
+});
+
+ipcMain.handle('youtube:is-pinned', () => {
+  if (youtubeWindow && !youtubeWindow.isDestroyed()) {
+    return youtubeWindow.isAlwaysOnTop();
+  }
+  return false;
+});
+
+ipcMain.on('youtube:playback-state-changed', (_event, playing) => {
+  emitToRenderer('youtube:playback-state', { playing });
+});
+
+ipcMain.on('youtube:video-selected-changed', (_event, payload) => {
+  emitToRenderer('youtube:video-selected', payload);
+});
 
 ipcMain.handle('app:launch-cubase', (_event, cubasePath) => {
   launchCubase(cubasePath);

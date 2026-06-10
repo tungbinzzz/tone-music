@@ -5,6 +5,7 @@ import SettingsWindow from './components/settings-window'
 import LaughWindow from './components/laugh-window'
 import LicenseScreen from './components/license-screen'
 import SplashScreen from './components/splash-screen'
+import YoutubeWindow from './components/youtube-window'
 import '../styles.css'
 
 const view = new URLSearchParams(window.location.search).get('view')
@@ -15,6 +16,8 @@ if (view === 'settings') {
   createRoot(document.getElementById('root')!).render(<React.StrictMode><LaughWindow /></React.StrictMode>)
 } else if (view === 'splash') {
   createRoot(document.getElementById('root')!).render(<React.StrictMode><SplashScreen /></React.StrictMode>)
+} else if (view === 'youtube') {
+  createRoot(document.getElementById('root')!).render(<React.StrictMode><YoutubeWindow /></React.StrictMode>)
 } else {
   function App() {
     const [licenseState, setLicenseState] = useState<'checking' | 'licensed' | 'unlicensed'>('checking')

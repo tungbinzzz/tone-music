@@ -28,6 +28,10 @@ contextBridge.exposeInMainWorld('nhacApp', {
   deactivateLicense: () => ipcRenderer.invoke('license:deactivate'),
   checkUpdate: (version) => ipcRenderer.invoke('license:check-update', version),
   getLicenseInfo: () => ipcRenderer.invoke('license:get-info'),
+  youtubeTogglePin: () => ipcRenderer.invoke('youtube:toggle-pin'),
+  youtubeIsPinned: () => ipcRenderer.invoke('youtube:is-pinned'),
+  sendYoutubePlaybackState: (playing) => ipcRenderer.send('youtube:playback-state-changed', playing),
+  sendYoutubeVideoSelected: (payload) => ipcRenderer.send('youtube:video-selected-changed', payload),
   onYoutubeVideoSelected: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('youtube:video-selected', listener);

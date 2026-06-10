@@ -19,13 +19,13 @@ def _get_user_data_path() -> Path:
     system = platform.system()
     if system == "Windows":
         app_data = os.environ.get("APPDATA", "")
-        return Path(app_data) / "cubase-youtube-tone-assistant"
+        return Path(app_data) / "tc-studio"
     elif system == "Darwin":
         home = Path.home()
-        return home / "Library" / "Application Support" / "cubase-youtube-tone-assistant"
+        return home / "Library" / "Application Support" / "tc-studio"
     else:
         config = os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
-        return Path(config) / "cubase-youtube-tone-assistant"
+        return Path(config) / "tc-studio"
 
 
 def _read_license() -> Optional[dict]:

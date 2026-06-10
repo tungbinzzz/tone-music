@@ -72,6 +72,11 @@ declare global {
       deactivateLicense: () => Promise<{ success: boolean; message?: string }>
       checkUpdate: (version?: string) => Promise<{ has_update: boolean; latest_version?: string; url?: string; changelog?: string }>
       getLicenseInfo: () => Promise<{ licenseKey?: string; plan?: string; offlineTokenExp?: string } | null>
+      // YouTube Window
+      youtubeTogglePin: () => Promise<boolean>
+      youtubeIsPinned: () => Promise<boolean>
+      sendYoutubePlaybackState: (playing: boolean) => void
+      sendYoutubeVideoSelected: (payload: { videoId: string; url: string }) => void
       onYoutubeVideoSelected: (callback: (payload: { videoId: string; url: string }) => void) => void | (() => void)
       onYoutubePlaybackState: (callback: (payload: { playing: boolean }) => void) => void | (() => void)
       onEngineEvent: (callback: (payload: EngineEvent) => void) => void | (() => void)

@@ -391,7 +391,12 @@ export default function ToneLinkAssistant() {
   const lastAutoSentKey = useRef('')
   const autoSendKeyRef = useRef(autoSendKey)
   const didStartupGenericSync = useRef(false)
+  const isConfigLoaded = useRef(false)
   const lastYoutubeVideoId = useRef('')
+  const isLiveRef = useRef(isLive)
+  useEffect(() => {
+    isLiveRef.current = isLive
+  }, [isLive])
   const toolbarRef = useRef<HTMLDivElement>(null)
   const nhacApp = useMemo(() => window.nhacApp ?? fallbackNhacApp, [])
   const [volumePopupOpen, setVolumePopupOpen] = useState(false)
@@ -446,9 +451,13 @@ export default function ToneLinkAssistant() {
   useEffect(() => {
     const unsubscribe = nhacApp.onYoutubePlaybackState?.((payload) => {
       if (payload.playing) {
-        startToneDetection().catch(() => {})
+        if (!isLiveRef.current) {
+          startToneDetection().catch(() => {})
+        }
       } else {
-        stopToneDetection()
+        if (isLiveRef.current) {
+          stopToneDetection()
+        }
       }
     })
     return () => {
@@ -504,6 +513,7 @@ export default function ToneLinkAssistant() {
       if (feedbackInput) {
         setMidiInputs([feedbackInput])
       }
+      isConfigLoaded.current = true
     }
 
     nhacApp.getConfig().then((config) => {
@@ -565,6 +575,20 @@ export default function ToneLinkAssistant() {
   }
 
   async function saveConfig(next = configSettings, midi = midiSettings, auto = true, showSavedStatus = false) {
+    if (!isConfigLoaded.current) {
+      console.warn('[ToneLinkAssistant] Config not loaded yet, ignoring saveConfig to prevent overwriting with defaults.')
+      return {
+        youtubeUrl: next.youtubeUrl,
+        pythonPath: next.pythonPath,
+        cubasePath: next.cubasePath,
+        autoLaunchYoutube: next.autoOpenYoutube,
+        autoLaunchCubase: next.autoOpenCubase,
+        midiOutputName: midi.output,
+        midiInputName: midi.feedbackInput,
+        autoSendKey: true,
+      }
+    }
+
     const saved = await nhacApp.saveConfig({
       youtubeUrl: next.youtubeUrl,
       pythonPath: next.pythonPath,
