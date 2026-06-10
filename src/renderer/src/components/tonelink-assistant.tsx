@@ -64,6 +64,20 @@ function parseKey(keyName: string) {
   return { note, scale }
 }
 
+function shiftKey(keyName: string, semitones: number): string {
+  if (!keyName || keyName === '--' || semitones === 0) return keyName
+  const parsed = parseKey(keyName)
+  if (!parsed) return keyName
+  const noteIndex = CHROMATIC_NOTES.indexOf(parsed.note)
+  if (noteIndex === -1) return keyName
+
+  let nextIndex = noteIndex + semitones
+  nextIndex = Math.max(0, Math.min(CHROMATIC_NOTES.length - 1, nextIndex))
+  const nextNote = CHROMATIC_NOTES[nextIndex]
+  return parsed.scale ? `${nextNote} ${parsed.scale}` : nextNote
+}
+
+
 const SCALE_VALUE_BY_NAME: Record<string, number> = {
   major: 0,
   minor: 5,
@@ -428,6 +442,34 @@ export default function ToneLinkAssistant() {
   useEffect(() => {
     isLiveRef.current = isLive
   }, [isLive])
+
+  const pitchShiftRef = useRef(pitchShift)
+  useEffect(() => {
+    pitchShiftRef.current = pitchShift
+  }, [pitchShift])
+
+  const lastPitchShift = useRef(pitchShift)
+  useEffect(() => {
+    const diff = pitchShift - lastPitchShift.current
+    lastPitchShift.current = pitchShift
+    if (diff === 0) return
+
+    setToneData((current) => {
+      if (current.tone === '--') return current
+      const parsed = parseKey(current.tone)
+      if (!parsed) return current
+      const noteIndex = CHROMATIC_NOTES.indexOf(parsed.note)
+      if (noteIndex === -1) return current
+      const nextNoteIndex = Math.max(0, Math.min(CHROMATIC_NOTES.length - 1, noteIndex + diff))
+      const nextNote = CHROMATIC_NOTES[nextNoteIndex]
+      const nextKey = parsed.scale ? `${nextNote} ${parsed.scale}` : nextNote
+
+      sendKeyScaleToCubase('pitch_shift', nextKey).catch(console.error)
+
+      return { ...current, tone: nextKey }
+    })
+  }, [pitchShift])
+
   const toolbarRef = useRef<HTMLDivElement>(null)
   const nhacApp = useMemo(() => window.nhacApp ?? fallbackNhacApp, [])
   const [volumePopupOpen, setVolumePopupOpen] = useState(false)
@@ -568,13 +610,14 @@ export default function ToneLinkAssistant() {
       if (event.type === 'tone') {
         const confidence = Math.round((event.confidence || 0) * 100)
         const nextTone = event.key || '--'
-        setToneData({ tone: nextTone, confidence, isDetecting: true })
+        const shiftedTone = shiftKey(nextTone, pitchShiftRef.current)
+        setToneData({ tone: shiftedTone, confidence, isDetecting: true })
         setAnalysis({
           latency: event.analysis_ms === undefined ? '--' : String(event.analysis_ms),
           window: event.key_votes === undefined ? '--' : `${event.key_votes}/${event.min_key_votes ?? '--'}`,
           instant: event.instant_key || '--',
         })
-        autoSendDetectedKey(nextTone, event).catch(console.error)
+        autoSendDetectedKey(shiftedTone, event).catch(console.error)
       }
 
       if (event.type === 'analyzer_status') {
