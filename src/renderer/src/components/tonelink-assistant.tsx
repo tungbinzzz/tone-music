@@ -47,6 +47,23 @@ const KEY_TO_INDEX: Record<string, number> = {
   B: 126,
 }
 
+const CHROMATIC_NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+function parseKey(keyName: string) {
+  if (!keyName || keyName === '--') return null
+  const match = keyName.trim().match(/^([A-G](?:#|b)?)\s*(.*)$/i)
+  if (!match) return null
+  let note = match[1].replace(/^([a-g])/, (letter) => letter.toUpperCase())
+  const scale = (match[2] || '').trim()
+
+  const norm: Record<string, string> = {
+    'Db': 'C#', 'Eb': 'D#', 'Gb': 'F#', 'Ab': 'G#', 'Bb': 'A#',
+    'db': 'C#', 'eb': 'D#', 'gb': 'F#', 'ab': 'G#', 'bb': 'A#',
+  }
+  note = norm[note] || note
+  return { note, scale }
+}
+
 const SCALE_VALUE_BY_NAME: Record<string, number> = {
   major: 0,
   minor: 5,
@@ -292,12 +309,26 @@ function ParameterControl({ value, onChange, icon, label, description, max = 127
 function PitchShiftControl({
   value,
   onChange,
+  tone,
 }: {
   value: number
   onChange: (value: number) => void
+  tone: string
 }) {
-  const canDecrease = value > PITCH_DISPLAY_MIN
-  const canIncrease = value < PITCH_DISPLAY_MAX
+  const parsed = parseKey(tone)
+  const noteIndex = parsed ? CHROMATIC_NOTES.indexOf(parsed.note) : -1
+
+  let canDecrease = value > PITCH_DISPLAY_MIN
+  let canIncrease = value < PITCH_DISPLAY_MAX
+
+  if (parsed && noteIndex !== -1) {
+    if (noteIndex === 0) {
+      canDecrease = false
+    }
+    if (noteIndex === CHROMATIC_NOTES.length - 1) {
+      canIncrease = false
+    }
+  }
 
   return (
     <div className="no-drag flex items-center gap-0.5 rounded-md bg-background border border-border px-1 py-0.5">
@@ -682,8 +713,25 @@ export default function ToneLinkAssistant() {
 
   async function updatePitchShift(value: number) {
     const nextValue = Math.min(Math.max(Math.round(value), PITCH_DISPLAY_MIN), PITCH_DISPLAY_MAX)
+    const diff = nextValue - pitchShift
     setPitchShift(nextValue)
     await sendMidi('tang_tong', cc.pitchShift, pitchDisplayToCc(nextValue))
+
+    if (diff !== 0 && toneData.tone !== '--') {
+      const parsed = parseKey(toneData.tone)
+      if (parsed) {
+        const noteIndex = CHROMATIC_NOTES.indexOf(parsed.note)
+        if (noteIndex !== -1) {
+          const nextNoteIndex = noteIndex + diff
+          if (nextNoteIndex >= 0 && nextNoteIndex < CHROMATIC_NOTES.length) {
+            const nextNote = CHROMATIC_NOTES[nextNoteIndex]
+            const nextKey = parsed.scale ? `${nextNote} ${parsed.scale}` : nextNote
+            setToneData((current) => ({ ...current, tone: nextKey }))
+            await sendKeyScaleToCubase('pitch_shift', nextKey)
+          }
+        }
+      }
+    }
   }
 
   async function updateReturnSpeed(value: number) {
@@ -718,6 +766,8 @@ export default function ToneLinkAssistant() {
     setToneData({ tone: '--', confidence: 0, isDetecting: true })
     setIsLive(true)
     lastAutoSentKey.current = ''
+    setPitchShift(0)
+    await sendMidi('tang_tong', cc.pitchShift, pitchDisplayToCc(0))
   }
 
   async function stopToneDetection() {
@@ -868,7 +918,7 @@ export default function ToneLinkAssistant() {
               <ToggleBtn label="Nhạc" active={controls.beat} onClick={() => toggleControl('beat')} />
               <ToggleBtn label="Mic" active={controls.mic} onClick={() => toggleControl('mic')} />
               <ToggleBtn label="Vang" active={controls.vang} onClick={() => toggleControl('vang')} />
-              <PitchShiftControl value={pitchShift} onChange={updatePitchShift} />
+              <PitchShiftControl value={pitchShift} onChange={updatePitchShift} tone={toneData.tone} />
             </div>
 
             <div className="h-5 w-px bg-border" />
