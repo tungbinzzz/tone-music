@@ -32,6 +32,8 @@ const args = [
   '--specpath',
   workPath,
   '--hidden-import',
+  'essentia.standard',
+  '--hidden-import',
   'mido.backends.rtmidi',
   '--hidden-import',
   'rtmidi',

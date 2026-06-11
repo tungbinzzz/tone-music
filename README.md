@@ -1,6 +1,6 @@
 # Cubase YouTube Tone Assistant
 
-App Windows dùng Electron làm UI và Python/librosa làm engine để:
+App Windows dùng Electron làm UI và Python/Essentia làm engine để:
 
 - Tự mở YouTube khi bật app.
 - Mở YouTube trong một cửa sổ Electron riêng và theo dõi video được chọn để tự trigger dò tone.
@@ -27,6 +27,14 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 ```
+
+Essentia la optional tonal engine. Neu runtime da co Essentia, engine se dung `KeyExtractor`; neu khong, engine tu fallback ve NumPy legacy detector. Cai dat thu cong bang:
+
+```powershell
+python -m pip install -r requirements-essentia.txt
+```
+
+Luu y: PyPI `essentia` hien co the fail khi build tren Windows/Python 3.12. Dung Python 3.10/3.11 hoac mot build Essentia tuong thich cho ban release.
 
 Nếu bạn dùng virtualenv, trong app hãy đặt trường `Python` thành:
 
@@ -164,7 +172,7 @@ Nếu mở YouTube bằng trình duyệt ngoài như Chrome/Edge độc lập, a
 - `src/renderer/*`: UI.
 - `engine/app.py`: JSON command server qua stdio.
 - `engine/audio_loopback.py`: Thu audio hệ thống qua `soundcard`.
-- `engine/key_detector.py`: Dò tone bằng `librosa` chroma + Krumhansl key profile.
+- `engine/key_detector.py`: Dò tone bằng Essentia `KeyExtractor`, fallback về detector NumPy legacy nếu Essentia chưa có sẵn.
 - `engine/cubase_midi.py`: Gửi MIDI CC sang Cubase/loopMIDI.
 - `cubase_remote/*`: Cubase MIDI Remote API script.
 
@@ -177,11 +185,15 @@ Engine đang phân tích theo streaming window, nhưng UI hiển thị tone chí
 - Gom các kết quả đủ confidence thành phiếu bầu.
 - Chỉ hiển thị `Tone chính` sau khi đủ số phiếu tối thiểu, mặc định 12 phiếu.
 - Cửa sổ phân tích trượt tối đa 2 giây.
-- Mode `fast` dùng chroma thuần `numpy` để tránh chi phí khởi tạo `librosa` ở lần dò đầu tiên.
+- Mode mặc định `essentia` dùng `KeyExtractor` và trả thêm `strength`/`detector_source`.
+- Analyzer dùng weighted hysteresis để bỏ qua key thoáng qua sau khi đã lock tone chính.
+- Transition/cao trào được arm bằng multi-feature trend: RMS, spectral flux, spectral centroid và high-band ratio.
+- MIDI auto-send chỉ commit khi engine đặt `midi_should_send=true`, gồm `send_initial_key` và `send_climax_key`.
+- Debug timeline được ghi vào `%LOCALAPPDATA%/ToneLink/debug-timeline.jsonl` hoặc `TONELINK_DEBUG_DIR`.
 - Engine warm-up detector trong nền khi khởi động để tránh lần phân tích đầu tiên bị chậm.
 
 Khi người dùng chọn video YouTube mới hoặc bấm `Bắt đầu dò tone`, app reset bộ gom để tone chính không bị lẫn với bài trước.
 
-Nếu muốn kết quả ổn định hơn nhưng chậm hơn, có thể tăng `min_main_key_votes` hoặc `window_seconds` trong `engine/audio_loopback.py`. Mode `accurate` mới dùng `librosa.chroma_cqt`.
+Nếu muốn kết quả ổn định hơn nhưng chậm hơn, có thể tăng `min_main_key_votes` hoặc `window_seconds` trong `engine/audio_loopback.py`.
 
 UI có thêm chỉ báo `UI: hh:mm:ss` trong panel dò tone. Chỉ báo này được render bằng `requestAnimationFrame`. Khi đang click/xem YouTube nhúng, nếu `UI` vẫn đổi thời gian nhưng tone không đổi thì vấn đề nằm ở engine/audio event. Nếu `UI` cũng đứng, vấn đề là renderer/webview bị throttle hoặc compositor không repaint.

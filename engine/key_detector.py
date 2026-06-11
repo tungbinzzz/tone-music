@@ -36,6 +36,8 @@ SCALE_PROFILES = {
 class KeyResult:
     key: str
     confidence: float
+    strength: float = 0.0
+    source: str = "legacy"
 
 
 def _correlation(a: np.ndarray, b: np.ndarray) -> float:
@@ -97,6 +99,32 @@ def _accurate_chroma(samples: np.ndarray, sample_rate: int) -> np.ndarray:
     return np.mean(chroma, axis=1)
 
 
+def _essentia_key(samples: np.ndarray, sample_rate: int) -> KeyResult:
+    try:
+        from essentia.standard import KeyExtractor
+    except ImportError as error:  # pragma: no cover - reported at runtime by the engine.
+        raise RuntimeError("Missing dependency: essentia. Falling back to legacy key detector.") from error
+
+    mono = np.asarray(samples, dtype=np.float32)
+    if mono.ndim > 1:
+        mono = np.mean(mono, axis=1).astype(np.float32)
+
+    extractor = KeyExtractor(
+        sampleRate=sample_rate,
+        profileType="edma",
+        frameSize=4096,
+        hopSize=2048,
+    )
+    key, scale, strength = extractor(mono)
+    key_name = str(key).replace("Db", "C#").replace("Eb", "D#").replace("Gb", "F#").replace("Ab", "G#").replace("Bb", "A#")
+    scale_name = str(scale).lower()
+    if scale_name not in ("major", "minor"):
+        return KeyResult("--", 0.0, 0.0, "essentia")
+
+    safe_strength = max(0.0, min(1.0, float(strength)))
+    return KeyResult(f"{key_name} {scale_name}", safe_strength, safe_strength, "essentia")
+
+
 def detect_key(samples: np.ndarray, sample_rate: int, mode: str = "fast") -> KeyResult:
     if samples.ndim > 1:
         samples = np.mean(samples, axis=1)
@@ -109,7 +137,20 @@ def detect_key(samples: np.ndarray, sample_rate: int, mode: str = "fast") -> Key
     if not math.isfinite(rms) or rms < 0.003:
         return KeyResult("--", 0.0)
 
-    chroma_vector = _accurate_chroma(samples, sample_rate) if mode == "accurate" else _fast_chroma(samples, sample_rate)
+    if mode in ("essentia", "accurate"):
+        try:
+            return _essentia_key(samples, sample_rate)
+        except RuntimeError:
+            if mode == "essentia":
+                pass
+            else:
+                chroma_vector = _accurate_chroma(samples, sample_rate)
+        except Exception:
+            if mode != "essentia":
+                raise
+
+    if mode != "accurate":
+        chroma_vector = _fast_chroma(samples, sample_rate)
 
     scores = []
     for index, name in enumerate(PITCH_CLASSES):
@@ -125,13 +166,13 @@ def detect_key(samples: np.ndarray, sample_rate: int, mode: str = "fast") -> Key
     score_gap = best_score - second_score
     if entropy >= 0.965 and score_gap < 0.04:
         dominant_index = int(np.argmax(chroma_vector))
-        return KeyResult(f"{PITCH_CLASSES[dominant_index]} chromatic", 0.55)
+        return KeyResult(f"{PITCH_CLASSES[dominant_index]} chromatic", 0.55, 0.55, "legacy")
 
     confidence = max(0.0, min(1.0, (best_score - second_score + 0.25) / 0.5))
 
-    return KeyResult(best_key, confidence)
+    return KeyResult(best_key, confidence, confidence, "legacy")
 
 
 def warmup_detector(sample_rate: int = 22050) -> None:
     noise = np.random.default_rng(0).normal(0, 0.01, sample_rate).astype(np.float32)
-    detect_key(noise, sample_rate, "fast")
+    detect_key(noise, sample_rate, "essentia")

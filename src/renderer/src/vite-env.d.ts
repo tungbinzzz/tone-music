@@ -26,6 +26,17 @@ type EngineEvent = {
   key_votes?: number
   min_key_votes?: number
   instant_key?: string
+  instant_confidence?: number
+  instant_strength?: number
+  strength?: number
+  detector_source?: string
+  transition_score?: number
+  is_building?: boolean
+  state?: string
+  midi_should_send?: boolean
+  midi_action?: string
+  debug_timeline?: string
+  debug_tail?: Array<Record<string, unknown>>
   source?: string
   mode?: string
   status?: string
@@ -75,10 +86,10 @@ declare global {
       // YouTube Window
       youtubeTogglePin: () => Promise<boolean>
       youtubeIsPinned: () => Promise<boolean>
-      sendYoutubePlaybackState: (playing: boolean) => void
+      sendYoutubePlaybackState: (payload: { playing: boolean; currentTime?: number; duration?: number; progressRatio?: number }) => void
       sendYoutubeVideoSelected: (payload: { videoId: string; url: string }) => void
       onYoutubeVideoSelected: (callback: (payload: { videoId: string; url: string }) => void) => void | (() => void)
-      onYoutubePlaybackState: (callback: (payload: { playing: boolean }) => void) => void | (() => void)
+      onYoutubePlaybackState: (callback: (payload: { playing: boolean; currentTime?: number; duration?: number; progressRatio?: number }) => void) => void | (() => void)
       onEngineEvent: (callback: (payload: EngineEvent) => void) => void | (() => void)
       onEngineLog: (callback: (payload: { level?: string; text: string }) => void) => void | (() => void)
       onConfigChanged: (callback: (payload: AppConfig) => void) => void | (() => void)

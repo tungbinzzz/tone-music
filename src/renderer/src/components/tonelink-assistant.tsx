@@ -101,6 +101,10 @@ type EngineEvent = {
   analysis_ms?: number
   key_votes?: number
   min_key_votes?: number
+  midi_should_send?: boolean
+  midi_action?: string
+  state?: string
+  instant_key?: string
 }
 
 const fallbackNhacApp: Window['nhacApp'] = {
@@ -523,6 +527,13 @@ export default function ToneLinkAssistant() {
   // Auto start/stop tone detection based on YouTube playback state
   useEffect(() => {
     const unsubscribe = nhacApp.onYoutubePlaybackState?.((payload) => {
+      nhacApp.engineRequest('set_playback_position', {
+        current_time: payload.currentTime || 0,
+        duration: payload.duration || 0,
+        progress_ratio: payload.progressRatio || 0,
+        playing: Boolean(payload.playing),
+      }).catch(() => {})
+
       if (payload.playing) {
         if (!isLiveRef.current) {
           startToneDetection().catch(() => {})
@@ -850,6 +861,7 @@ export default function ToneLinkAssistant() {
 
   async function autoSendDetectedKey(keyName: string, event: EngineEvent) {
     if (!autoSendKeyRef.current || !keyName || keyName === '--') return
+    if (!event.midi_should_send) return
     if ((event.key_votes || 0) < (event.min_key_votes || 0)) return
     if (lastAutoSentKey.current === keyName) return
     lastAutoSentKey.current = keyName

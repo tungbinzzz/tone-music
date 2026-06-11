@@ -133,15 +133,31 @@ export default function YoutubeWindow() {
     let lastPlayingState: boolean | null = null
     const playbackInterval = setInterval(async () => {
       try {
-        const playing = await webview.executeJavaScript(
-          '(function(){ var v = document.querySelector("video"); return v ? !v.paused && !v.ended && v.readyState > 2 : false; })()'
+        const state = await webview.executeJavaScript(
+          `(() => {
+            const v = document.querySelector("video")
+            if (!v) return { playing: false, currentTime: 0, duration: 0, progressRatio: 0 }
+            const duration = Number.isFinite(v.duration) ? v.duration : 0
+            const currentTime = Number.isFinite(v.currentTime) ? v.currentTime : 0
+            return {
+              playing: !v.paused && !v.ended && v.readyState > 2,
+              currentTime,
+              duration,
+              progressRatio: duration > 0 ? currentTime / duration : 0,
+            }
+          })()`
         )
-        const isPlaying = !!playing
+        const isPlaying = !!state?.playing
+        if (window.nhacApp?.sendYoutubePlaybackState) {
+          window.nhacApp.sendYoutubePlaybackState({
+            playing: isPlaying,
+            currentTime: Number(state?.currentTime || 0),
+            duration: Number(state?.duration || 0),
+            progressRatio: Number(state?.progressRatio || 0),
+          })
+        }
         if (isPlaying !== lastPlayingState) {
           lastPlayingState = isPlaying
-          if (window.nhacApp?.sendYoutubePlaybackState) {
-            window.nhacApp.sendYoutubePlaybackState(isPlaying)
-          }
         }
       } catch (_) {
         // Ignored, webview not ready or not loaded

@@ -135,6 +135,17 @@ def handle(request: dict) -> None:
             reply(request_id, running=False)
             return
 
+        if command == "set_playback_position":
+            if analyzer:
+                analyzer.update_playback_position(
+                    current_time=payload.get("current_time", 0),
+                    duration=payload.get("duration", 0),
+                    progress_ratio=payload.get("progress_ratio", 0),
+                    playing=payload.get("playing", False),
+                )
+            reply(request_id, updated=True)
+            return
+
         if command == "cubase_transport":
             action = payload.get("action", "")
             output_name = payload.get("midi_output_name") or config.get("midi_output_name", "")

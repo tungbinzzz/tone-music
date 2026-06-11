@@ -558,8 +558,17 @@ ipcMain.handle('youtube:is-pinned', () => {
   return false;
 });
 
-ipcMain.on('youtube:playback-state-changed', (_event, playing) => {
-  emitToRenderer('youtube:playback-state', { playing });
+ipcMain.on('youtube:playback-state-changed', (_event, payload) => {
+  if (typeof payload === 'boolean') {
+    emitToRenderer('youtube:playback-state', { playing: payload });
+    return;
+  }
+  emitToRenderer('youtube:playback-state', {
+    playing: Boolean(payload?.playing),
+    currentTime: Number(payload?.currentTime || 0),
+    duration: Number(payload?.duration || 0),
+    progressRatio: Number(payload?.progressRatio || 0)
+  });
 });
 
 ipcMain.on('youtube:video-selected-changed', (_event, payload) => {

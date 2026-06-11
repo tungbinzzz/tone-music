@@ -1,0 +1,5 @@
+# Optional tonal engine dependency.
+# The PyPI sdist currently fails to build in this Windows/Python 3.12 venv.
+# Install a compatible Essentia build for the target Python/runtime before packaging
+# if you want `detector_source=essentia` instead of the NumPy legacy fallback.
+essentia
