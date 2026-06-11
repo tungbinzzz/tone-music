@@ -443,6 +443,7 @@ export default function ToneLinkAssistant() {
   const isConfigLoaded = useRef(false)
   const lastYoutubeVideoId = useRef('')
   const isLiveRef = useRef(isLive)
+  const manualStopRef = useRef(false)
   useEffect(() => {
     isLiveRef.current = isLive
   }, [isLive])
@@ -535,10 +536,11 @@ export default function ToneLinkAssistant() {
       }).catch(() => {})
 
       if (payload.playing) {
-        if (!isLiveRef.current) {
+        if (!isLiveRef.current && !manualStopRef.current) {
           startToneDetection().catch(() => {})
         }
       } else {
+        manualStopRef.current = false
         if (isLiveRef.current) {
           stopToneDetection()
         }
@@ -814,6 +816,7 @@ export default function ToneLinkAssistant() {
   }
 
   async function startToneDetection() {
+    manualStopRef.current = false
     const saved = await saveConfig()
     await nhacApp.engineRequest('configure', { midi_output_name: saved.midiOutputName })
     await nhacApp.engineRequest('start_analyzer', { reset_statistics: true })
@@ -825,7 +828,12 @@ export default function ToneLinkAssistant() {
   }
 
   async function stopToneDetection() {
-    await nhacApp.engineRequest('stop_analyzer')
+    manualStopRef.current = true
+    try {
+      await nhacApp.engineRequest('stop_analyzer')
+    } finally {
+      await nhacApp.stopEngineProcess?.()
+    }
     setToneData({ tone: '--', confidence: 0, isDetecting: false })
     setIsLive(false)
   }

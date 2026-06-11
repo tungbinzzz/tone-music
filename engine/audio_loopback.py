@@ -22,6 +22,60 @@ STATE_TRANSITION_ARMED = "TRANSITION_ARMED"
 STATE_LOCKING_CLIMAX = "LOCKING_CLIMAX"
 STATE_LOCKED_CLIMAX = "LOCKED_CLIMAX"
 
+NOTE_INDEX = {
+    "C": 0,
+    "C#": 1,
+    "Db": 1,
+    "D": 2,
+    "D#": 3,
+    "Eb": 3,
+    "E": 4,
+    "F": 5,
+    "F#": 6,
+    "Gb": 6,
+    "G": 7,
+    "G#": 8,
+    "Ab": 8,
+    "A": 9,
+    "A#": 10,
+    "Bb": 10,
+    "B": 11,
+}
+
+
+def _key_note_index(key_name: str) -> Optional[int]:
+    if not key_name or key_name == "--":
+        return None
+    note = key_name.strip().split(maxsplit=1)[0]
+    return NOTE_INDEX.get(note)
+
+
+def _is_higher_key(candidate_key: str, locked_key: str) -> bool:
+    candidate_index = _key_note_index(candidate_key)
+    locked_index = _key_note_index(locked_key)
+    if candidate_index is None or locked_index is None:
+        return False
+    return candidate_index > locked_index
+
+
+def _resample_audio(samples: np.ndarray, source_rate: int, target_rate: int) -> np.ndarray:
+    if source_rate == target_rate or samples.size == 0:
+        return samples
+
+    source_frames = samples.shape[0]
+    target_frames = max(1, int(round(source_frames * target_rate / source_rate)))
+    source_positions = np.linspace(0.0, 1.0, source_frames, endpoint=False)
+    target_positions = np.linspace(0.0, 1.0, target_frames, endpoint=False)
+
+    if samples.ndim == 1:
+        return np.interp(target_positions, source_positions, samples).astype(np.float32)
+
+    channels = [
+        np.interp(target_positions, source_positions, samples[:, channel])
+        for channel in range(samples.shape[1])
+    ]
+    return np.stack(channels, axis=1).astype(np.float32)
+
 
 @dataclass
 class AudioFeatures:
@@ -398,6 +452,19 @@ class RealtimeAnalyzer:
             candidate_key, candidate_confidence, candidate_strength = self._candidate_lock.winner(excluded_key=self.current_locked_key)
             stable_count = self._candidate_lock.stable_count(candidate_key)
             armed_for = time.time() - self._transition_started_at if self._transition_started_at else 0.0
+            candidate_is_higher = _is_higher_key(candidate_key, self.current_locked_key)
+            if (
+                candidate_key != "--"
+                and stable_count >= 5
+                and candidate_confidence >= 0.62
+                and candidate_strength >= self.vote_confidence_threshold
+                and armed_for >= 2.0
+                and candidate_is_higher
+            ):
+                self._commit_key(candidate_key, candidate_confidence, candidate_strength, STATE_LOCKED_CLIMAX, "Climax key detected and locked")
+                self._key_votes = 5
+                committed = True
+                return self.current_locked_key, self.current_locked_confidence, committed, "locking_climax_higher_key_committed"
             if (
                 candidate_key != "--"
                 and stable_count >= 5
@@ -405,9 +472,7 @@ class RealtimeAnalyzer:
                 and candidate_strength >= self.vote_confidence_threshold
                 and armed_for >= 2.0
             ):
-                self._commit_key(candidate_key, candidate_confidence, candidate_strength, STATE_LOCKED_CLIMAX, "Climax key detected and locked")
-                self._key_votes = 5
-                committed = True
+                return self.current_locked_key, self.current_locked_confidence, committed, "locking_climax_candidate_not_higher_hold_initial"
             return self.current_locked_key, self.current_locked_confidence, committed, "locking_climax"
 
         if self.state == STATE_LOCKED_CLIMAX:
@@ -423,129 +488,161 @@ class RealtimeAnalyzer:
         self._thread = None
 
     def _run(self) -> None:
-        chunk_frames = int(self.sample_rate * self.hop_seconds)
         window_frames = int(self.sample_rate * self.window_seconds)
         chunks: list[np.ndarray] = []
+        capture_rates = []
+        for rate in (48000, 44100, self.sample_rate):
+            if rate not in capture_rates:
+                capture_rates.append(rate)
 
         try:
             speaker = sc.default_speaker()
             mic = sc.get_microphone(speaker.name, include_loopback=True)
-            self.emit(
-                {
-                    "type": "analyzer_status",
-                    "status": "capturing",
-                    "source": "WASAPI loopback",
-                    "mode": self.mode,
-                    "window_seconds": self.window_seconds,
-                    "hop_seconds": self.hop_seconds,
-                    "debug_timeline": self._debug.path,
-                }
-            )
-            with mic.recorder(samplerate=self.sample_rate, channels=2, blocksize=chunk_frames) as recorder:
-                while not self._stop.is_set():
-                    capture_started = time.time()
-                    chunk = np.asarray(recorder.record(numframes=chunk_frames))
-                    capture_ms = int((time.time() - capture_started) * 1000)
-                    features = self._features.update(chunk)
-
-                    chunks.append(chunk)
-
-                    total_frames = sum(item.shape[0] for item in chunks)
-                    while chunks and total_frames - chunks[0].shape[0] >= window_frames:
-                        total_frames -= chunks[0].shape[0]
-                        chunks.pop(0)
-
-                    if total_frames < self.sample_rate:
-                        continue
-
-                    samples = np.concatenate(chunks, axis=0)
-                    if samples.shape[0] > window_frames:
-                        samples = samples[-window_frames:]
-
+            last_error: Exception | None = None
+            for capture_rate in capture_rates:
+                if self._stop.is_set():
+                    return
+                chunks = []
+                chunk_frames = int(capture_rate * self.hop_seconds)
+                try:
                     self.emit(
                         {
                             "type": "analyzer_status",
-                            "status": "analyzing",
+                            "status": "capturing",
                             "source": "WASAPI loopback",
-                            "window_seconds": round(samples.shape[0] / self.sample_rate, 2),
                             "mode": self.mode,
+                            "window_seconds": self.window_seconds,
+                            "hop_seconds": self.hop_seconds,
+                            "analysis_sample_rate": self.sample_rate,
+                            "capture_sample_rate": capture_rate,
+                            "debug_timeline": self._debug.path,
                         }
                     )
-                    started = time.time()
-                    result = detect_key(samples, self.sample_rate, self.mode)
-                    main_key, main_confidence, committed, transition_reason = self._track_main_key(
-                        result.key,
-                        result.confidence,
-                        result.strength,
-                        features,
-                    )
-                    midi_should_send, midi_action = self._midi_policy.decide(self.state, main_key, committed)
-                    analysis_ms = int((time.time() - started) * 1000)
-                    min_votes = 5 if self.state in (STATE_TRANSITION_ARMED, STATE_LOCKING_CLIMAX, STATE_LOCKED_CLIMAX) else self.min_main_key_votes
+                    with mic.recorder(samplerate=capture_rate, channels=2, blocksize=chunk_frames) as recorder:
+                        while not self._stop.is_set():
+                            capture_started = time.time()
+                            raw_chunk = np.asarray(recorder.record(numframes=chunk_frames))
+                            chunk = _resample_audio(raw_chunk, capture_rate, self.sample_rate)
+                            capture_ms = int((time.time() - capture_started) * 1000)
+                            features = self._features.update(chunk)
 
-                    debug_event = {
-                        "state": self.state,
-                        "locked_key": main_key,
-                        "instant_key": result.key,
-                        "instant_confidence": round(result.confidence, 4),
-                        "instant_strength": round(result.strength, 4),
-                        "detector_source": result.source,
-                        "key_votes": self._key_votes,
-                        "min_key_votes": min_votes,
-                        "features": {key: round(value, 6) if isinstance(value, float) else value for key, value in asdict(features).items()},
-                        "seconds_since_initial_lock": round(time.time() - self._initial_locked_at, 3) if self._initial_locked_at else 0.0,
-                        "transition_build_streak": self._transition_build_streak,
-                        "transition_candidate_key": self._transition_candidate_key,
-                        "transition_candidate_votes": self._transition_candidate_votes,
-                        "playback_current_time": round(self._playback_current_time, 3),
-                        "playback_duration": round(self._playback_duration, 3),
-                        "playback_progress_ratio": round(self._playback_progress_ratio, 4),
-                        "playback_playing": self._playback_playing,
-                        "min_transition_seconds_after_lock": self.min_transition_seconds_after_lock,
-                        "min_transition_progress_ratio": self.min_transition_progress_ratio,
-                        "min_transition_build_frames": self.min_transition_build_frames,
-                        "min_transition_candidate_votes": self.min_transition_candidate_votes,
-                        "strong_transition_score_threshold": self.strong_transition_score_threshold,
-                        "late_transition_seconds_after_lock": self.late_transition_seconds_after_lock,
-                        "transition_reason": transition_reason,
-                        "midi_action": midi_action,
-                        "midi_should_send": midi_should_send,
-                    }
-                    self._debug.append(debug_event)
+                            chunks.append(chunk)
 
+                            total_frames = sum(item.shape[0] for item in chunks)
+                            while chunks and total_frames - chunks[0].shape[0] >= window_frames:
+                                total_frames -= chunks[0].shape[0]
+                                chunks.pop(0)
+
+                            if total_frames < self.sample_rate:
+                                continue
+
+                            samples = np.concatenate(chunks, axis=0)
+                            if samples.shape[0] > window_frames:
+                                samples = samples[-window_frames:]
+
+                            self.emit(
+                                {
+                                    "type": "analyzer_status",
+                                    "status": "analyzing",
+                                    "source": "WASAPI loopback",
+                                    "window_seconds": round(samples.shape[0] / self.sample_rate, 2),
+                                    "mode": self.mode,
+                                }
+                            )
+                            started = time.time()
+                            result = detect_key(samples, self.sample_rate, self.mode)
+                            main_key, main_confidence, committed, transition_reason = self._track_main_key(
+                                result.key,
+                                result.confidence,
+                                result.strength,
+                                features,
+                            )
+                            midi_should_send, midi_action = self._midi_policy.decide(self.state, main_key, committed)
+                            analysis_ms = int((time.time() - started) * 1000)
+                            min_votes = 5 if self.state in (STATE_TRANSITION_ARMED, STATE_LOCKING_CLIMAX, STATE_LOCKED_CLIMAX) else self.min_main_key_votes
+
+                            debug_event = {
+                                "state": self.state,
+                                "locked_key": main_key,
+                                "instant_key": result.key,
+                                "instant_confidence": round(result.confidence, 4),
+                                "instant_strength": round(result.strength, 4),
+                                "detector_source": result.source,
+                                "key_votes": self._key_votes,
+                                "min_key_votes": min_votes,
+                                "features": {key: round(value, 6) if isinstance(value, float) else value for key, value in asdict(features).items()},
+                                "seconds_since_initial_lock": round(time.time() - self._initial_locked_at, 3) if self._initial_locked_at else 0.0,
+                                "transition_build_streak": self._transition_build_streak,
+                                "transition_candidate_key": self._transition_candidate_key,
+                                "transition_candidate_votes": self._transition_candidate_votes,
+                                "transition_candidate_is_higher": _is_higher_key(self._transition_candidate_key, main_key),
+                                "playback_current_time": round(self._playback_current_time, 3),
+                                "playback_duration": round(self._playback_duration, 3),
+                                "playback_progress_ratio": round(self._playback_progress_ratio, 4),
+                                "playback_playing": self._playback_playing,
+                                "analysis_sample_rate": self.sample_rate,
+                                "capture_sample_rate": capture_rate,
+                                "min_transition_seconds_after_lock": self.min_transition_seconds_after_lock,
+                                "min_transition_progress_ratio": self.min_transition_progress_ratio,
+                                "min_transition_build_frames": self.min_transition_build_frames,
+                                "min_transition_candidate_votes": self.min_transition_candidate_votes,
+                                "strong_transition_score_threshold": self.strong_transition_score_threshold,
+                                "late_transition_seconds_after_lock": self.late_transition_seconds_after_lock,
+                                "transition_reason": transition_reason,
+                                "midi_action": midi_action,
+                                "midi_should_send": midi_should_send,
+                            }
+                            self._debug.append(debug_event)
+
+                            self.emit(
+                                {
+                                    "type": "tone",
+                                    "key": main_key,
+                                    "confidence": main_confidence,
+                                    "strength": self.current_locked_strength,
+                                    "instant_key": result.key,
+                                    "instant_confidence": result.confidence,
+                                    "instant_strength": result.strength,
+                                    "detector_source": result.source,
+                                    "key_votes": self._key_votes,
+                                    "min_key_votes": min_votes,
+                                    "state": self.state,
+                                    "transition_score": features.trend_score,
+                                    "seconds_since_initial_lock": round(time.time() - self._initial_locked_at, 3) if self._initial_locked_at else 0.0,
+                                    "transition_build_streak": self._transition_build_streak,
+                                    "transition_candidate_key": self._transition_candidate_key,
+                                    "transition_candidate_votes": self._transition_candidate_votes,
+                                    "transition_candidate_is_higher": _is_higher_key(self._transition_candidate_key, main_key),
+                                    "playback_current_time": round(self._playback_current_time, 3),
+                                    "playback_duration": round(self._playback_duration, 3),
+                                    "playback_progress_ratio": round(self._playback_progress_ratio, 4),
+                                    "is_building": features.is_building,
+                                    "midi_should_send": midi_should_send,
+                                    "midi_action": midi_action,
+                                    "debug_timeline": self._debug.path,
+                                    "debug_tail": self._debug.tail(10),
+                                    "source": "WASAPI loopback",
+                                    "capture_ms": capture_ms,
+                                    "analysis_ms": analysis_ms,
+                                    "window_seconds": round(samples.shape[0] / self.sample_rate, 2),
+                                    "hop_seconds": self.hop_seconds,
+                                    "mode": self.mode,
+                                }
+                            )
+                        return
+                except Exception as error:
+                    last_error = error
                     self.emit(
                         {
-                            "type": "tone",
-                            "key": main_key,
-                            "confidence": main_confidence,
-                            "strength": self.current_locked_strength,
-                            "instant_key": result.key,
-                            "instant_confidence": result.confidence,
-                            "instant_strength": result.strength,
-                            "detector_source": result.source,
-                            "key_votes": self._key_votes,
-                            "min_key_votes": min_votes,
-                            "state": self.state,
-                            "transition_score": features.trend_score,
-                            "seconds_since_initial_lock": round(time.time() - self._initial_locked_at, 3) if self._initial_locked_at else 0.0,
-                            "transition_build_streak": self._transition_build_streak,
-                            "transition_candidate_key": self._transition_candidate_key,
-                            "transition_candidate_votes": self._transition_candidate_votes,
-                            "playback_current_time": round(self._playback_current_time, 3),
-                            "playback_duration": round(self._playback_duration, 3),
-                            "playback_progress_ratio": round(self._playback_progress_ratio, 4),
-                            "is_building": features.is_building,
-                            "midi_should_send": midi_should_send,
-                            "midi_action": midi_action,
-                            "debug_timeline": self._debug.path,
-                            "debug_tail": self._debug.tail(10),
+                            "type": "analyzer_status",
+                            "status": "capture_retry",
                             "source": "WASAPI loopback",
-                            "capture_ms": capture_ms,
-                            "analysis_ms": analysis_ms,
-                            "window_seconds": round(samples.shape[0] / self.sample_rate, 2),
-                            "hop_seconds": self.hop_seconds,
-                            "mode": self.mode,
+                            "capture_sample_rate": capture_rate,
+                            "message": f"Capture failed at {capture_rate} Hz: {error}",
                         }
                     )
+                    continue
+            if last_error is not None:
+                self.emit({"type": "error", "message": f"Audio capture failed for all sample rates: {last_error}"})
         except Exception as error:
             self.emit({"type": "error", "message": str(error)})
