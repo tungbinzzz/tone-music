@@ -264,6 +264,88 @@ async function checkUpdate(currentVersion, platform = process.platform) {
   }
 }
 
+function toRemoteKnownSong(song = {}, license, app) {
+  const licenseKey = license?.licenseKey || license?.license_key;
+  return {
+    video_id: String(song.videoId || '').trim(),
+    title: String(song.title || song.videoId || '').trim(),
+    url: String(song.url || '').trim(),
+    duration: Number(song.duration || 0),
+    main_tone: String(song.mainTone || '').trim(),
+    transitions: Array.isArray(song.transitions)
+      ? song.transitions.map((item) => ({
+          time: Math.max(0, Number(item?.time || 0)),
+          tone: String(item?.tone || '').trim(),
+        })).filter((item) => item.tone)
+      : [],
+    license_key: licenseKey,
+    machine_id: getMachineId(),
+    app_version: app.getVersion(),
+  };
+}
+
+function fromRemoteKnownSong(song = {}) {
+  const now = new Date().toISOString();
+  return {
+    videoId: String(song.video_id || '').trim(),
+    title: String(song.title || song.video_id || '').trim(),
+    url: String(song.url || '').trim(),
+    duration: Number(song.duration || 0),
+    mainTone: String(song.main_tone || '').trim(),
+    completed: false,
+    completedAt: '',
+    transitions: Array.isArray(song.transitions)
+      ? song.transitions.map((item) => ({
+          time: Math.max(0, Number(item?.time || 0)),
+          tone: String(item?.tone || '').trim(),
+        })).filter((item) => item.tone)
+      : [],
+    updatedAt: song.updated_at || now,
+    createdAt: song.created_at || song.updated_at || now,
+    contributionCount: Number(song.contribution_count || 0),
+  };
+}
+
+async function getOnlineKnownSong(videoId) {
+  const id = String(videoId || '').trim();
+  if (!id) return null;
+  try {
+    const res = await fetchJson(`${LICENSE_SERVER_URL}/known-songs/${encodeURIComponent(id)}`);
+    if (!res.ok || !res.data?.found || !res.data.song) return null;
+    return fromRemoteKnownSong(res.data.song);
+  } catch (e) {
+    console.warn('[KnownSongs] Online lookup failed:', e.message);
+    return null;
+  }
+}
+
+async function saveOnlineKnownSong(app, song) {
+  const stored = readLicense(app);
+  const licenseKey = stored?.licenseKey || stored?.license_key;
+  const videoId = String(song?.videoId || '').trim();
+  const mainTone = String(song?.mainTone || '').trim();
+  if (!stored || !licenseKey) {
+    return { saved: false, reason: 'missing_license' };
+  }
+  if (!videoId || !mainTone || mainTone === '--') {
+    return { saved: false, reason: 'missing_song_tone' };
+  }
+
+  try {
+    const res = await fetchJson(`${LICENSE_SERVER_URL}/known-songs`, {
+      method: 'POST',
+      body: JSON.stringify(toRemoteKnownSong(song, stored, app)),
+    });
+    if (!res.ok || !res.data?.saved) {
+      return { saved: false, status: res.status, message: res.data?.detail || res.data?.message };
+    }
+    return { saved: true, song: fromRemoteKnownSong(res.data.song) };
+  } catch (e) {
+    console.warn('[KnownSongs] Online save failed:', e.message);
+    return { saved: false, message: e.message };
+  }
+}
+
 module.exports = {
   getMachineId,
   activateLicense,
@@ -271,4 +353,6 @@ module.exports = {
   deactivateLicense,
   checkUpdate,
   readLicense,
+  getOnlineKnownSong,
+  saveOnlineKnownSong,
 };

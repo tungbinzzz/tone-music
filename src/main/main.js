@@ -150,10 +150,50 @@ function upsertKnownSong(song) {
   return songs;
 }
 
-function getKnownSong(videoId) {
+function mergeKnownSongData(localSong, onlineSong) {
+  if (!localSong) return onlineSong || null;
+  if (!onlineSong) return localSong;
+
+  const transitions = [...(localSong.transitions || []), ...(onlineSong.transitions || [])]
+    .map((item) => ({
+      time: Math.max(0, Number(item?.time || 0)),
+      tone: String(item?.tone || '').trim()
+    }))
+    .filter((item) => item.tone)
+    .sort((left, right) => left.time - right.time)
+    .filter((item, index, rows) => rows.findIndex((row) => row.tone === item.tone) === index);
+
+  return {
+    ...localSong,
+    ...onlineSong,
+    createdAt: localSong.createdAt || onlineSong.createdAt || '',
+    completed: Boolean(localSong.completed || onlineSong.completed),
+    completedAt: localSong.completedAt || onlineSong.completedAt || '',
+    mainTone: onlineSong.mainTone || localSong.mainTone || '',
+    transitions
+  };
+}
+
+async function getKnownSong(videoId) {
   const id = String(videoId || '').trim();
   if (!id) return null;
-  return readKnownSongs().find((song) => song.videoId === id) || null;
+  const localSong = readKnownSongs().find((song) => song.videoId === id) || null;
+  if (
+    localSong?.mainTone
+    && localSong.mainTone !== '--'
+    && Array.isArray(localSong.transitions)
+    && localSong.transitions.length > 0
+  ) {
+    return localSong;
+  }
+
+  const onlineSong = await licenseClient.getOnlineKnownSong(id);
+  const mergedSong = mergeKnownSongData(localSong, onlineSong);
+  if (onlineSong?.mainTone) {
+    const songs = upsertKnownSong(mergedSong);
+    emitToAllRenderers('known-songs:changed', songs);
+  }
+  return mergedSong;
 }
 
 function getDefaultConfig() {
@@ -684,7 +724,19 @@ ipcMain.handle('known-songs:list', () => readKnownSongs());
 ipcMain.handle('known-songs:get', (_event, videoId) => getKnownSong(videoId));
 ipcMain.handle('known-songs:save', (_event, song) => {
   const songs = upsertKnownSong(song);
+  const savedSong = readKnownSongs().find((item) => item.videoId === String(song?.videoId || '')) || null;
   emitToAllRenderers('known-songs:changed', songs);
+  if (!savedSong?.mainTone || savedSong.mainTone === '--') return songs;
+
+  licenseClient.saveOnlineKnownSong(app, savedSong).then((result) => {
+    if (result?.saved && result.song?.mainTone) {
+      const localSong = readKnownSongs().find((item) => item.videoId === result.song.videoId) || null;
+      const merged = upsertKnownSong(mergeKnownSongData(localSong, result.song));
+      emitToAllRenderers('known-songs:changed', merged);
+    }
+  }).catch((error) => {
+    emitToRenderer('engine:log', { level: 'warn', text: `Known song online save failed: ${error.message}` });
+  });
   return songs;
 });
 

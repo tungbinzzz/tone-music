@@ -55,11 +55,31 @@ create table if not exists app_updates (
 
 create index if not exists idx_updates_platform on app_updates(platform, created_at desc);
 
+-- Online known-song tone cache contributed by licensed clients
+create table if not exists known_songs (
+  id                     uuid primary key default uuid_generate_v4(),
+  video_id               text unique not null,
+  title                  text not null,
+  url                    text not null default '',
+  duration               double precision not null default 0,
+  main_tone              text not null,
+  transitions            jsonb not null default '[]'::jsonb,
+  contribution_count     int not null default 1,
+  last_contributor_hash  text,
+  last_app_version       text,
+  created_at             timestamptz default now(),
+  updated_at             timestamptz default now()
+);
+
+create index if not exists idx_known_songs_video_id on known_songs(video_id);
+create index if not exists idx_known_songs_updated_at on known_songs(updated_at desc);
+
 -- ── Row Level Security (optional, server uses service role key) ───────────────
 alter table licenses enable row level security;
 alter table activations enable row level security;
 alter table app_updates enable row level security;
 alter table users enable row level security;
+alter table known_songs enable row level security;
 
 -- Service role bypasses RLS automatically — no policies needed for backend
 -- Add a sample license for testing:

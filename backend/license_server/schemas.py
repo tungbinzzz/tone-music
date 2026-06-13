@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
 class ActivateRequest(BaseModel):
     license_key: str
@@ -30,3 +30,18 @@ class UpdateResponse(BaseModel):
     url: Optional[str] = None
     changelog: Optional[str] = None
     is_required: bool = False
+
+class KnownSongTransition(BaseModel):
+    time: float
+    tone: str
+
+class KnownSongUpsertRequest(BaseModel):
+    video_id: str
+    title: str
+    url: Optional[str] = ""
+    duration: Optional[float] = 0
+    main_tone: str
+    transitions: List[KnownSongTransition] = Field(default_factory=list)
+    license_key: str
+    machine_id: str
+    app_version: Optional[str] = None
