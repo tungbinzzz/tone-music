@@ -6,6 +6,7 @@ import LaughWindow from './components/laugh-window'
 import LicenseScreen from './components/license-screen'
 import SplashScreen from './components/splash-screen'
 import YoutubeWindow from './components/youtube-window'
+import FavoritesWindow from './components/favorites-window'
 import '../styles.css'
 
 const view = new URLSearchParams(window.location.search).get('view')
@@ -18,6 +19,8 @@ if (view === 'settings') {
   createRoot(document.getElementById('root')!).render(<React.StrictMode><SplashScreen /></React.StrictMode>)
 } else if (view === 'youtube') {
   createRoot(document.getElementById('root')!).render(<React.StrictMode><YoutubeWindow /></React.StrictMode>)
+} else if (view === 'favorites') {
+  createRoot(document.getElementById('root')!).render(<React.StrictMode><FavoritesWindow /></React.StrictMode>)
 } else {
   function App() {
     const [licenseState, setLicenseState] = useState<'checking' | 'licensed' | 'unlicensed'>('checking')
@@ -38,6 +41,12 @@ if (view === 'settings') {
         }
       })()
     }, [])
+
+    useEffect(() => {
+      if (licenseState === 'unlicensed') {
+        ;(window as any).nhacApp?.setMainWindowSize?.(420, 560)
+      }
+    }, [licenseState])
 
     if (licenseState === 'checking') {
       // Window is already the right size (set by main process based on license.json)

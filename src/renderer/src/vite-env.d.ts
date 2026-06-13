@@ -6,6 +6,7 @@ declare module '*.jpeg' { const src: string; export default src }
 declare module '*.svg' { const src: string; export default src }
 declare module '*.webp' { const src: string; export default src }
 
+declare global {
 type AppConfig = {
   youtubeUrl?: string
   cubasePath?: string
@@ -35,6 +36,9 @@ type EngineEvent = {
   state?: string
   midi_should_send?: boolean
   midi_action?: string
+  playback_current_time?: number
+  playback_duration?: number
+  playback_progress_ratio?: number
   debug_timeline?: string
   debug_tail?: Array<Record<string, unknown>>
   source?: string
@@ -47,17 +51,40 @@ type EngineEvent = {
   message?: string
 }
 
+type FavoriteTransition = {
+  time: number
+  tone: string
+}
+
+type FavoriteSong = {
+  videoId: string
+  title: string
+  url: string
+  duration?: number
+  mainTone?: string
+  completed?: boolean
+  completedAt?: string
+  transitions?: FavoriteTransition[]
+  createdAt?: string
+  updatedAt?: string
+}
+
 type EngineResponse = {
   ports?: string[]
   midi_input_name?: string
   [key: string]: unknown
 }
 
-declare global {
   interface Window {
     nhacApp: {
       getConfig: () => Promise<AppConfig>
       saveConfig: (config: AppConfig) => Promise<AppConfig>
+      listFavorites?: () => Promise<FavoriteSong[]>
+      saveFavorite?: (song: FavoriteSong) => Promise<FavoriteSong[]>
+      deleteFavorite?: (videoId: string) => Promise<FavoriteSong[]>
+      listKnownSongs?: () => Promise<FavoriteSong[]>
+      getKnownSong?: (videoId: string) => Promise<FavoriteSong | null>
+      saveKnownSong?: (song: FavoriteSong) => Promise<FavoriteSong[]>
       selectCubase: () => Promise<string>
       launchYoutube: (url: string) => Promise<boolean>
       closeYoutube: () => Promise<boolean>
@@ -66,6 +93,7 @@ declare global {
       importPreset: () => Promise<{ imported: boolean; filePath?: string; preset?: unknown }>
       openSettingsWindow: () => Promise<boolean>
       openLaughWindow: () => Promise<boolean>
+      openFavoritesWindow?: () => Promise<boolean>
       closeCurrentWindow: () => Promise<boolean>
       setMainWindowSize: (width: number, height: number) => Promise<boolean>
       minimizeWindow: () => Promise<boolean>
@@ -82,17 +110,18 @@ declare global {
       verifyLicense: () => Promise<{ valid: boolean; plan?: string; message?: string; source?: string }>
       deactivateLicense: () => Promise<{ success: boolean; message?: string }>
       checkUpdate: (version?: string) => Promise<{ has_update: boolean; latest_version?: string; url?: string; changelog?: string }>
-      getLicenseInfo: () => Promise<{ licenseKey?: string; plan?: string; offlineTokenExp?: string } | null>
+      getLicenseInfo: () => Promise<{ licenseKey?: string; license_key?: string; plan?: string; offlineTokenExp?: string } | null>
       // YouTube Window
       youtubeTogglePin: () => Promise<boolean>
       youtubeIsPinned: () => Promise<boolean>
-      sendYoutubePlaybackState: (payload: { playing: boolean; currentTime?: number; duration?: number; progressRatio?: number }) => void
-      sendYoutubeVideoSelected: (payload: { videoId: string; url: string }) => void
-      onYoutubeVideoSelected: (callback: (payload: { videoId: string; url: string }) => void) => void | (() => void)
-      onYoutubePlaybackState: (callback: (payload: { playing: boolean; currentTime?: number; duration?: number; progressRatio?: number }) => void) => void | (() => void)
+      sendYoutubePlaybackState: (payload: { playing: boolean; ended?: boolean; currentTime?: number; duration?: number; progressRatio?: number; title?: string }) => void
+      sendYoutubeVideoSelected: (payload: { videoId: string; url: string; title?: string }) => void
+      onYoutubeVideoSelected: (callback: (payload: { videoId: string; url: string; title?: string }) => void) => void | (() => void)
+      onYoutubePlaybackState: (callback: (payload: { playing: boolean; ended?: boolean; currentTime?: number; duration?: number; progressRatio?: number; title?: string }) => void) => void | (() => void)
       onEngineEvent: (callback: (payload: EngineEvent) => void) => void | (() => void)
       onEngineLog: (callback: (payload: { level?: string; text: string }) => void) => void | (() => void)
       onConfigChanged: (callback: (payload: AppConfig) => void) => void | (() => void)
+      onFavoritesChanged?: (callback: (payload: FavoriteSong[]) => void) => void | (() => void)
     }
   }
 }

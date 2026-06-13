@@ -28,12 +28,132 @@ let splashWindow;
 let youtubeWindow;
 let settingsWindow;
 let laughWindow;
+let favoritesWindow;
 let engineProcess;
 let nextRequestId = 1;
 const pendingRequests = new Map();
 
 function getConfigPath() {
   return path.join(app.getPath('userData'), 'app-config.json');
+}
+
+function getFavoritesPath() {
+  return path.join(app.getPath('userData'), 'favorite-songs.json');
+}
+
+function getKnownSongsPath() {
+  return path.join(app.getPath('userData'), 'known-songs.json');
+}
+
+function readJsonArray(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeJsonArray(filePath, rows) {
+  fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(rows, null, 2), 'utf8');
+}
+
+function readFavoriteSongs() {
+  return readJsonArray(getFavoritesPath());
+}
+
+function writeFavoriteSongs(songs) {
+  writeJsonArray(getFavoritesPath(), songs);
+}
+
+function normalizeFavoriteSong(song = {}) {
+  const videoId = String(song.videoId || '').trim();
+  if (!videoId) throw new Error('Missing YouTube video id.');
+
+  const now = new Date().toISOString();
+  const transitions = Array.isArray(song.transitions)
+    ? song.transitions
+        .map((item) => ({
+          time: Math.max(0, Number(item?.time || 0)),
+          tone: String(item?.tone || '').trim()
+        }))
+        .filter((item) => item.tone)
+        .filter((item, index, rows) => rows.findIndex((row) => row.tone === item.tone) === index)
+    : [];
+
+  return {
+    videoId,
+    title: String(song.title || videoId).trim(),
+    url: String(song.url || '').trim(),
+    duration: Math.max(0, Number(song.duration || 0)),
+    mainTone: String(song.mainTone || '').trim(),
+    completed: Boolean(song.completed),
+    completedAt: song.completedAt ? String(song.completedAt) : '',
+    transitions,
+    updatedAt: now,
+    createdAt: song.createdAt ? String(song.createdAt) : now
+  };
+}
+
+function upsertFavoriteSong(song) {
+  const nextSong = normalizeFavoriteSong(song);
+  const songs = readFavoriteSongs();
+  const index = songs.findIndex((item) => item.videoId === nextSong.videoId);
+  if (index >= 0) {
+    songs[index] = {
+      ...songs[index],
+      ...nextSong,
+      createdAt: songs[index].createdAt || nextSong.createdAt,
+      mainTone: nextSong.mainTone || songs[index].mainTone || '',
+      completed: nextSong.completed || Boolean(songs[index].completed),
+      completedAt: nextSong.completedAt || songs[index].completedAt || '',
+      transitions: nextSong.transitions.length ? nextSong.transitions : (songs[index].transitions || [])
+    };
+  } else {
+    songs.unshift(nextSong);
+  }
+  writeFavoriteSongs(songs);
+  return songs;
+}
+
+function readKnownSongs() {
+  return readJsonArray(getKnownSongsPath());
+}
+
+function writeKnownSongs(songs) {
+  writeJsonArray(getKnownSongsPath(), songs);
+}
+
+function upsertKnownSong(song) {
+  const nextSong = normalizeFavoriteSong(song);
+  if (!nextSong.mainTone || nextSong.mainTone === '--') {
+    return readKnownSongs();
+  }
+  const songs = readKnownSongs();
+  const index = songs.findIndex((item) => item.videoId === nextSong.videoId);
+  if (index >= 0) {
+    songs[index] = {
+      ...songs[index],
+      ...nextSong,
+      createdAt: songs[index].createdAt || nextSong.createdAt,
+      completed: nextSong.completed || Boolean(songs[index].completed),
+      completedAt: nextSong.completedAt || songs[index].completedAt || '',
+      mainTone: nextSong.mainTone || songs[index].mainTone || '',
+      transitions: nextSong.transitions.length ? nextSong.transitions : (songs[index].transitions || [])
+    };
+  } else {
+    songs.unshift(nextSong);
+  }
+  writeKnownSongs(songs);
+  return songs;
+}
+
+function getKnownSong(videoId) {
+  const id = String(videoId || '').trim();
+  if (!id) return null;
+  return readKnownSongs().find((song) => song.videoId === id) || null;
 }
 
 function getDefaultConfig() {
@@ -407,6 +527,39 @@ function openLaughWindow() {
   return true;
 }
 
+function openFavoritesWindow() {
+  if (favoritesWindow && !favoritesWindow.isDestroyed()) {
+    favoritesWindow.focus();
+    return true;
+  }
+
+  favoritesWindow = new BrowserWindow({
+    width: 420,
+    height: 520,
+    minWidth: 360,
+    minHeight: 420,
+    title: 'TC Studio Favorites',
+    backgroundColor: '#101317',
+    autoHideMenuBar: true,
+    frame: false,
+    resizable: true,
+    minimizable: true,
+    icon: APP_ICON,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false
+    }
+  });
+  favoritesWindow.setMenuBarVisibility(false);
+  favoritesWindow.on('closed', () => {
+    favoritesWindow = undefined;
+  });
+  loadRendererWindow(favoritesWindow, '?view=favorites');
+  return true;
+}
+
 function createWindow() {
   // Check license synchronously so we can set the right window dimensions from creation
   const hasLicense = (() => {
@@ -515,6 +668,26 @@ ipcMain.handle('config:save', (_event, config) => {
   return nextConfig;
 });
 
+ipcMain.handle('favorites:list', () => readFavoriteSongs());
+ipcMain.handle('favorites:save', (_event, song) => {
+  const songs = upsertFavoriteSong(song);
+  emitToAllRenderers('favorites:changed', songs);
+  return songs;
+});
+ipcMain.handle('favorites:delete', (_event, videoId) => {
+  const songs = readFavoriteSongs().filter((song) => song.videoId !== String(videoId || ''));
+  writeFavoriteSongs(songs);
+  emitToAllRenderers('favorites:changed', songs);
+  return songs;
+});
+ipcMain.handle('known-songs:list', () => readKnownSongs());
+ipcMain.handle('known-songs:get', (_event, videoId) => getKnownSong(videoId));
+ipcMain.handle('known-songs:save', (_event, song) => {
+  const songs = upsertKnownSong(song);
+  emitToAllRenderers('known-songs:changed', songs);
+  return songs;
+});
+
 ipcMain.handle('dialog:select-cubase', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Select Cubase executable or project file',
@@ -565,9 +738,11 @@ ipcMain.on('youtube:playback-state-changed', (_event, payload) => {
   }
   emitToRenderer('youtube:playback-state', {
     playing: Boolean(payload?.playing),
+    ended: Boolean(payload?.ended),
     currentTime: Number(payload?.currentTime || 0),
     duration: Number(payload?.duration || 0),
-    progressRatio: Number(payload?.progressRatio || 0)
+    progressRatio: Number(payload?.progressRatio || 0),
+    title: String(payload?.title || '')
   });
 });
 
@@ -613,6 +788,7 @@ ipcMain.handle('preset:import', async () => {
 
 ipcMain.handle('settings:open', () => openSettingsWindow());
 ipcMain.handle('laughs:open', () => openLaughWindow());
+ipcMain.handle('favorites:open', () => openFavoritesWindow());
 ipcMain.handle('window:close-current', (event) => {
   const currentWindow = BrowserWindow.fromWebContents(event.sender);
   if (currentWindow && !currentWindow.isDestroyed()) {

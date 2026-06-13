@@ -101,7 +101,7 @@ export default function YoutubeWindow() {
       // Forward video details back to main app
       const videoId = getYoutubeVideoId(url)
       if (window.nhacApp?.sendYoutubeVideoSelected) {
-        window.nhacApp.sendYoutubeVideoSelected({ videoId, url })
+        window.nhacApp.sendYoutubeVideoSelected({ videoId, url, title: (webview as any).getTitle?.() || '' })
       }
     }
 
@@ -120,7 +120,7 @@ export default function YoutubeWindow() {
       // Initial video detection on load finish
       const videoId = getYoutubeVideoId(url)
       if (window.nhacApp?.sendYoutubeVideoSelected) {
-        window.nhacApp.sendYoutubeVideoSelected({ videoId, url })
+        window.nhacApp.sendYoutubeVideoSelected({ videoId, url, title: (webview as any).getTitle?.() || '' })
       }
     }
 
@@ -136,14 +136,16 @@ export default function YoutubeWindow() {
         const state = await webview.executeJavaScript(
           `(() => {
             const v = document.querySelector("video")
-            if (!v) return { playing: false, currentTime: 0, duration: 0, progressRatio: 0 }
+            if (!v) return { playing: false, ended: false, currentTime: 0, duration: 0, progressRatio: 0, title: document.title || "" }
             const duration = Number.isFinite(v.duration) ? v.duration : 0
             const currentTime = Number.isFinite(v.currentTime) ? v.currentTime : 0
             return {
               playing: !v.paused && !v.ended && v.readyState > 2,
+              ended: Boolean(v.ended || (duration > 0 && currentTime >= duration - 1)),
               currentTime,
               duration,
               progressRatio: duration > 0 ? currentTime / duration : 0,
+              title: document.title || "",
             }
           })()`
         )
@@ -154,6 +156,8 @@ export default function YoutubeWindow() {
             currentTime: Number(state?.currentTime || 0),
             duration: Number(state?.duration || 0),
             progressRatio: Number(state?.progressRatio || 0),
+            ended: Boolean(state?.ended),
+            title: String(state?.title || ''),
           })
         }
         if (isPlaying !== lastPlayingState) {

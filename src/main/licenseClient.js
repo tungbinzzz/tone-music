@@ -92,6 +92,7 @@ function readLicense(app) {
  */
 function writeLicense(app, data) {
   try {
+    fs.mkdirSync(path.dirname(getLicensePath(app)), { recursive: true });
     fs.writeFileSync(getLicensePath(app), JSON.stringify(data, null, 2), 'utf8');
     return true;
   } catch (e) {
@@ -148,6 +149,7 @@ async function activateLicense(app, licenseKey) {
 
     const licenseData = {
       licenseKey: machineInfo.license_key,
+      license_key: machineInfo.license_key,
       machineId,
       plan: res.data.plan,
       offlineToken: res.data.offline_token,
@@ -172,6 +174,7 @@ async function activateLicense(app, licenseKey) {
 async function verifyLicense(app) {
   const stored = readLicense(app);
   if (!stored) return { valid: false, message: 'Not activated', source: 'none' };
+  const storedLicenseKey = stored.licenseKey || stored.license_key;
 
   const machineId = getMachineId();
   if (stored.machineId !== machineId) {
@@ -183,7 +186,7 @@ async function verifyLicense(app) {
     const res = await fetchJson(`${LICENSE_SERVER_URL}/license/verify`, {
       method: 'POST',
       body: JSON.stringify({
-        license_key: stored.licenseKey,
+        license_key: storedLicenseKey,
         machine_id: machineId,
         offline_token: stored.offlineToken,
         app_version: app.getVersion(),
@@ -198,6 +201,8 @@ async function verifyLicense(app) {
 
       writeLicense(app, {
         ...stored,
+        licenseKey: storedLicenseKey,
+        license_key: storedLicenseKey,
         offlineToken: res.data.offline_token || stored.offlineToken,
         offlineTokenExp,
         lastVerified: new Date().toISOString(),
@@ -227,12 +232,13 @@ async function verifyLicense(app) {
 async function deactivateLicense(app) {
   const stored = readLicense(app);
   if (!stored) return { success: true, message: 'No license to deactivate' };
+  const storedLicenseKey = stored.licenseKey || stored.license_key;
 
   try {
     await fetchJson(`${LICENSE_SERVER_URL}/license/deactivate`, {
       method: 'POST',
       body: JSON.stringify({
-        license_key: stored.licenseKey,
+        license_key: storedLicenseKey,
         machine_id: getMachineId(),
       }),
     });

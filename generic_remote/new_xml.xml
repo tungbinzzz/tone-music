@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<remotedescription version="1.1">
+<ctrltable name="Standard MIDI">
+<ctrl><name>tatbeat</name><stat>176</stat><chan>0</chan><addr>20</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>tatmic</name><stat>176</stat><chan>0</chan><addr>21</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>remix</name><stat>176</stat><chan>0</chan><addr>22</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>tatvang</name><stat>176</stat><chan>0</chan><addr>24</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>lofi</name><stat>176</stat><chan>0</chan><addr>25</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>tat_bat_tang_tong</name><stat>176</stat><chan>0</chan><addr>26</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>tat_tune</name><stat>176</stat><chan>0</chan><addr>27</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>volumbeat</name><stat>176</stat><chan>0</chan><addr>2</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>volummic</name><stat>176</stat><chan>0</chan><addr>3</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>volumvang</name><stat>176</stat><chan>0</chan><addr>5</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>return_speed</name><stat>176</stat><chan>0</chan><addr>6</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>tang_tong</name><stat>176</stat><chan>0</chan><addr>7</addr><max>48</max><flags>1</flags></ctrl>
+<ctrl><name>volum_vang_ngan</name><stat>176</stat><chan>0</chan><addr>8</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>delay</name><stat>176</stat><chan>0</chan><addr>9</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>be</name><stat>176</stat><chan>0</chan><addr>10</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>flex_tune</name><stat>176</stat><chan>0</chan><addr>11</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>auto_key</name><stat>176</stat><chan>0</chan><addr>13</addr><max>127</max><flags>1</flags></ctrl>
+<ctrl><name>key</name><stat>176</stat><chan>0</chan><addr>17</addr><max>126</max><flags>3</flags></ctrl>
+<ctrl><name>scale</name><stat>176</stat><chan>0</chan><addr>18</addr><max>116</max><flags>3</flags></ctrl>
+</ctrltable>
+<bank name="ToneLink Beat Mic">
+<entry ctrl="tatbeat">
+<value><device>VST Mixer</device><chan>0</chan><name>monitor</name><flags>0</flags></value>
+</entry>
+<entry ctrl="tatmic">
+<value><device>VST Mixer</device><chan>1</chan><name>monitor</name><flags>0</flags></value>
+</entry>
+<entry ctrl="remix">
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot15:bypass</name><flags>0</flags></value>
+</entry>
+<entry ctrl="tatvang">
+<value><device>VST Mixer</device><chan>1</chan><name>sends:bypass</name><flags>0</flags></value>
+</entry>
+<entry ctrl="lofi">
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot16:bypass</name><flags>0</flags></value>
+</entry>
+<entry ctrl="tat_bat_tang_tong">
+<value><device>VST Mixer</device><chan>0</chan><name>inserts/slot1:on</name><flags>0</flags></value>
+</entry>
+<entry ctrl="tat_tune">
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot2:bypass</name><flags>0</flags></value>
+</entry>
+<entry ctrl="volumbeat">
+<value><device>VST Mixer</device><chan>0</chan><name>volume</name><flags>0</flags></value>
+</entry>
+<entry ctrl="volummic">
+<value><device>VST Mixer</device><chan>1</chan><name>volume</name><flags>0</flags></value>
+</entry>
+<entry ctrl="volumvang">
+<value><device>VST Mixer</device><chan>1</chan><name>sends/slot1:volume</name><flags>0</flags></value>
+</entry>
+<entry ctrl="return_speed">
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot2:param4</name><flags>0</flags></value>
+</entry>
+<entry ctrl="tang_tong">
+<value><device>VST Mixer</device><chan>0</chan><name>inserts/slot1:param4</name><flags>0</flags></value>
+</entry>
+<entry ctrl="volum_vang_ngan">
+<value><device>VST Mixer</device><chan>1</chan><name>sends/slot2:volume</name><flags>0</flags></value>
+</entry>
+<entry ctrl="delay">
+<value><device>VST Mixer</device><chan>1</chan><name>sends/slot3:volume</name><flags>0</flags></value>
+</entry>
+<entry ctrl="be">
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot2:param152</name><flags>0</flags></value>
+</entry>
+<entry ctrl="flex_tune">
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot2:param90</name><flags>0</flags></value>
+</entry>
+<entry ctrl="auto_key">
+<value><device>VST Mixer</device><chan>0</chan><name>inserts/slot2:edit</name><flags>0</flags></value>
+</entry>
+<entry ctrl="key">
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot2:param2</name><flags>0</flags></value>
+</entry>
+<entry ctrl="scale">
+<value><device>VST Mixer</device><chan>1</chan><name>inserts/slot2:param1</name><flags>0</flags></value>
+</entry>
+</bank>
+</remotedescription>

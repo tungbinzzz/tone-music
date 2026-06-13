@@ -25,6 +25,7 @@ import {
   Gauge,
   Pin,
   PinOff,
+  Star,
 } from 'lucide-react'
 
 const KEY_TO_INDEX: Record<string, number> = {
@@ -96,20 +97,56 @@ const PITCH_CC_CENTER = 24
 const PITCH_CC_STEP = 2
 
 type EngineEvent = {
+  type?: string
   key?: string
   confidence?: number
   analysis_ms?: number
+  window_seconds?: number
   key_votes?: number
   min_key_votes?: number
   midi_should_send?: boolean
   midi_action?: string
   state?: string
   instant_key?: string
+  playback_current_time?: number
+  playback_duration?: number
+  playback_progress_ratio?: number
+}
+
+type FavoriteTransition = {
+  time: number
+  tone: string
+}
+
+type FavoriteSong = {
+  videoId: string
+  title: string
+  url: string
+  duration?: number
+  mainTone?: string
+  completed?: boolean
+  completedAt?: string
+  transitions?: FavoriteTransition[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+type ToneCapture = {
+  mainTone: string
+  mainLocked: boolean
+  transitions: FavoriteTransition[]
+  lastTone: string
 }
 
 const fallbackNhacApp: Window['nhacApp'] = {
   getConfig: async () => ({}),
   saveConfig: async (config) => config,
+  listFavorites: async () => [],
+  saveFavorite: async (song) => [song],
+  deleteFavorite: async () => [],
+  listKnownSongs: async () => [],
+  getKnownSong: async () => null,
+  saveKnownSong: async (song) => [song],
   selectCubase: async () => '',
   launchYoutube: async () => false,
   closeYoutube: async () => false,
@@ -118,6 +155,7 @@ const fallbackNhacApp: Window['nhacApp'] = {
   importPreset: async () => ({ imported: false }),
   openSettingsWindow: async () => false,
   openLaughWindow: async () => false,
+  openFavoritesWindow: async () => false,
   closeCurrentWindow: async () => false,
   setMainWindowSize: async () => false,
   engineRequest: async (command) => {
@@ -126,9 +164,11 @@ const fallbackNhacApp: Window['nhacApp'] = {
   },
   stopEngineProcess: async () => false,
   onYoutubeVideoSelected: () => {},
+  onYoutubePlaybackState: () => {},
   onEngineEvent: () => {},
   onEngineLog: () => {},
   onConfigChanged: () => {},
+  onFavoritesChanged: () => {},
   minimizeWindow: async () => false,
   setAlwaysOnTop: async () => false,
   relaunchApp: async () => false,
@@ -377,7 +417,7 @@ function ToggleBtn({ label, active, onClick }: { label: string; active: boolean;
   return (
     <button
       onClick={onClick}
-      className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 cursor-pointer ${
+      className={`w-[66px] px-2 py-1 rounded-md text-[10px] font-medium transition-colors duration-200 cursor-pointer whitespace-nowrap ${
         active ? 'bg-primary text-primary-foreground shadow-md shadow-primary/30' : 'bg-muted text-muted-foreground hover:bg-muted/80'
       }`}
       title={`${active ? 'Bấm để tắt' : 'Bấm để bật'} ${label}`}
@@ -401,7 +441,7 @@ function EffectBtn({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 border cursor-pointer ${
+      className={`flex w-[82px] items-center justify-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors duration-200 border cursor-pointer whitespace-nowrap ${
         active ? 'bg-primary/10 border-primary text-primary' : 'bg-card border-border text-muted-foreground hover:border-primary/50'
       }`}
       title={`${active ? 'Bấm để tắt' : 'Bấm để bật'} ${label}`}
@@ -427,6 +467,8 @@ export default function ToneLinkAssistant() {
   const [showSettings, setShowSettings] = useState(false)
   const [settingsTab, setSettingsTab] = useState<'midi' | 'config'>('midi')
   const [saveStatus, setSaveStatus] = useState('')
+  const [favoriteStatus, setFavoriteStatus] = useState('')
+  const [favoriteSongs, setFavoriteSongs] = useState<FavoriteSong[]>([])
   const [midiOutputs, setMidiOutputs] = useState<string[]>([])
   const [midiInputs, setMidiInputs] = useState<string[]>([])
   const [midiSettings, setMidiSettings] = useState({ output: '', feedbackInput: '' })
@@ -444,9 +486,23 @@ export default function ToneLinkAssistant() {
   const lastYoutubeVideoId = useRef('')
   const isLiveRef = useRef(isLive)
   const manualStopRef = useRef(false)
+  const currentVideoRef = useRef<{ videoId: string; url: string; title: string; duration: number }>({ videoId: '', url: '', title: '', duration: 0 })
+  const toneCaptureRef = useRef<ToneCapture>({ mainTone: '', mainLocked: false, transitions: [], lastTone: '' })
+  const completedFavoriteVideoRef = useRef('')
+  const savedKnownSnapshotRef = useRef('')
+  const transitionProbeStartedRef = useRef(false)
+  const transitionProbeModeRef = useRef(false)
+  const pendingKnownLookupVideoIdRef = useRef('')
+  const playbackKnownLookupVideoIdRef = useRef('')
+  const cachedTonePlanRef = useRef<{ videoId: string; mainTone: string; transitions: FavoriteTransition[]; activeTone: string }>({ videoId: '', mainTone: '', transitions: [], activeTone: '' })
+  const favoriteSongsRef = useRef<FavoriteSong[]>([])
   useEffect(() => {
     isLiveRef.current = isLive
   }, [isLive])
+
+  useEffect(() => {
+    favoriteSongsRef.current = favoriteSongs
+  }, [favoriteSongs])
 
   const pitchShiftRef = useRef(pitchShift)
   useEffect(() => {
@@ -513,11 +569,45 @@ export default function ToneLinkAssistant() {
 
   useEffect(() => {
     const unsubscribe = nhacApp.onYoutubeVideoSelected((payload) => {
-      if (!payload.videoId || payload.videoId === lastYoutubeVideoId.current) return
+      if (!payload.videoId) return
+      if (
+        payload.videoId === lastYoutubeVideoId.current
+        && cachedTonePlanRef.current.videoId === payload.videoId
+      ) {
+        return
+      }
       lastYoutubeVideoId.current = payload.videoId
-      startToneDetection().catch((error) => {
-        console.error('Không trigger được dò tone từ YouTube:', error)
-      })
+      currentVideoRef.current = {
+        videoId: payload.videoId,
+        url: payload.url,
+        title: payload.title || payload.videoId,
+        duration: 0,
+      }
+      toneCaptureRef.current = { mainTone: '', mainLocked: false, transitions: [], lastTone: '' }
+      completedFavoriteVideoRef.current = ''
+      savedKnownSnapshotRef.current = ''
+      transitionProbeStartedRef.current = false
+      transitionProbeModeRef.current = false
+      pendingKnownLookupVideoIdRef.current = payload.videoId
+      playbackKnownLookupVideoIdRef.current = ''
+      cachedTonePlanRef.current = { videoId: '', mainTone: '', transitions: [], activeTone: '' }
+      setFavoriteStatus('')
+      resetPitchShiftToZero().catch(console.error)
+      ;(async () => {
+        try {
+          const knownSong = await nhacApp.getKnownSong?.(payload.videoId)
+          if (currentVideoRef.current.videoId !== payload.videoId) return
+          if (knownSong?.mainTone) {
+            await useKnownSongTonePlan(knownSong)
+            return
+          }
+          startToneDetection().catch((error) => {
+            console.error('Cannot start tone detection from YouTube:', error)
+          })
+        } finally {
+          pendingKnownLookupVideoIdRef.current = ''
+        }
+      })().catch(console.error)
     })
 
     return () => {
@@ -528,6 +618,61 @@ export default function ToneLinkAssistant() {
   // Auto start/stop tone detection based on YouTube playback state
   useEffect(() => {
     const unsubscribe = nhacApp.onYoutubePlaybackState?.((payload) => {
+      if (payload.title && currentVideoRef.current.videoId) {
+        currentVideoRef.current = {
+          ...currentVideoRef.current,
+          title: payload.title,
+          duration: payload.duration || currentVideoRef.current.duration,
+        }
+      }
+
+      const currentTimeValue = Number(payload.currentTime || 0)
+      if (pendingKnownLookupVideoIdRef.current === currentVideoRef.current.videoId) {
+        return
+      }
+      if (
+        currentVideoRef.current.videoId
+        && cachedTonePlanRef.current.videoId !== currentVideoRef.current.videoId
+        && playbackKnownLookupVideoIdRef.current !== currentVideoRef.current.videoId
+      ) {
+        playbackKnownLookupVideoIdRef.current = currentVideoRef.current.videoId
+        pendingKnownLookupVideoIdRef.current = currentVideoRef.current.videoId
+        ;(async () => {
+          try {
+            const videoId = currentVideoRef.current.videoId
+            const knownSong = await nhacApp.getKnownSong?.(videoId)
+            if (currentVideoRef.current.videoId !== videoId) return
+            if (knownSong?.mainTone) {
+              await useKnownSongTonePlan(knownSong)
+            }
+          } finally {
+            pendingKnownLookupVideoIdRef.current = ''
+          }
+        })().catch(console.error)
+        return
+      }
+      if (cachedTonePlanRef.current.videoId === currentVideoRef.current.videoId) {
+        applyCachedToneForPlayback(currentTimeValue)
+        nhacApp.engineRequest('set_playback_position', {
+          current_time: payload.currentTime || 0,
+          duration: payload.duration || 0,
+          progress_ratio: payload.progressRatio || 0,
+          playing: Boolean(payload.playing),
+        }).catch(() => {})
+
+        const progress = Number(payload.progressRatio || 0)
+        const needsTransitionProbe = cachedTonePlanRef.current.transitions.length === 0
+        if (payload.playing && needsTransitionProbe && progress >= 0.65 && !isLiveRef.current && !transitionProbeStartedRef.current) {
+          transitionProbeStartedRef.current = true
+          startTransitionProbe().catch(console.error)
+        }
+        if (!payload.playing && isLiveRef.current) {
+          transitionProbeModeRef.current = false
+          stopAnalyzerBackend().catch(console.error)
+        }
+        return
+      }
+
       nhacApp.engineRequest('set_playback_position', {
         current_time: payload.currentTime || 0,
         duration: payload.duration || 0,
@@ -544,6 +689,13 @@ export default function ToneLinkAssistant() {
         if (isLiveRef.current) {
           stopToneDetection()
         }
+      }
+
+      const progress = Number(payload.progressRatio || 0)
+      const duration = Number(payload.duration || 0)
+      const isComplete = Boolean(payload.ended) || (duration >= 30 && progress >= 0.95) || (duration >= 30 && currentTimeValue >= duration - 8)
+      if (isComplete) {
+        saveCompletedFavorite(duration).catch(console.error)
       }
     })
     return () => {
@@ -619,17 +771,27 @@ export default function ToneLinkAssistant() {
       applyConfig(config)
     })
 
+    nhacApp.listFavorites?.().then(setFavoriteSongs).catch(console.error)
+    const unsubscribeFavorites = nhacApp.onFavoritesChanged?.((songs) => {
+      setFavoriteSongs(songs)
+    })
+
     const unsubscribeEngine = nhacApp.onEngineEvent((event) => {
       if (event.type === 'tone') {
         const confidence = Math.round((event.confidence || 0) * 100)
         const nextTone = event.key || '--'
         const shiftedTone = shiftKey(nextTone, pitchShiftRef.current)
+        if (transitionProbeModeRef.current) {
+          captureFavoriteTone(nextTone, event)
+          if (event.state !== 'LOCKED_CLIMAX') return
+        }
         setToneData({ tone: shiftedTone, confidence, isDetecting: true })
         setAnalysis({
           latency: event.analysis_ms === undefined ? '--' : String(event.analysis_ms),
           window: event.key_votes === undefined ? '--' : `${event.key_votes}/${event.min_key_votes ?? '--'}`,
           instant: event.instant_key || '--',
         })
+        captureFavoriteTone(nextTone, event)
         autoSendDetectedKey(shiftedTone, event).catch(console.error)
       }
 
@@ -648,6 +810,7 @@ export default function ToneLinkAssistant() {
 
     return () => {
       if (typeof unsubscribeConfig === 'function') unsubscribeConfig()
+      if (typeof unsubscribeFavorites === 'function') unsubscribeFavorites()
       if (typeof unsubscribeEngine === 'function') unsubscribeEngine()
     }
   }, [nhacApp])
@@ -722,9 +885,9 @@ export default function ToneLinkAssistant() {
     setPitchShift(0)
 
     const startupMessages = [
-      { label: 'startup tune off', control: cc.effects.tune, value: 0 },
-      { label: 'startup lofi off', control: cc.effects.lofi, value: 0 },
-      { label: 'startup remix off', control: cc.effects.remix, value: 0 },
+      { label: 'startup tune off', control: cc.effects.tune, value: 127 },
+      { label: 'startup lofi off', control: cc.effects.lofi, value: 127 },
+      { label: 'startup remix off', control: cc.effects.remix, value: 127 },
       { label: 'startup tang_tong zero', control: cc.pitchShift, value: pitchDisplayToCc(0) },
     ]
 
@@ -741,13 +904,13 @@ export default function ToneLinkAssistant() {
 
   async function sendMidi(label: string, control: number, value: number) {
     const saved = await saveConfig()
-    await nhacApp.engineRequest('set_cubase_cc', {
+    const result = await nhacApp.engineRequest('set_cubase_cc', {
       channel: 0,
       control,
       value,
       midi_output_name: saved.midiOutputName || midiSettings.output,
     })
-    console.log(`Sent ${label}: CC${control}=${value}`)
+    console.log(`Sent ${label}: CC${control}=${value}`, result)
   }
 
   async function toggleControl(key: ControlKey) {
@@ -757,8 +920,9 @@ export default function ToneLinkAssistant() {
   }
 
   async function toggleEffect(key: EffectKey) {
-    const nextValue = effects[key] ? 0 : 127
-    setEffects((current) => ({ ...current, [key]: !current[key] }))
+    const nextActive = !effects[key]
+    const nextValue = nextActive ? 0 : 127
+    setEffects((current) => ({ ...current, [key]: nextActive }))
     await sendMidi(key, cc.effects[key], nextValue)
   }
 
@@ -815,27 +979,221 @@ export default function ToneLinkAssistant() {
     await nhacApp.engineRequest('start_midi_feedback', { midi_input_name: inputName })
   }
 
+  async function resetPitchShiftToZero() {
+    setPitchShift(0)
+    await sendMidi('tang_tong', cc.pitchShift, pitchDisplayToCc(0))
+  }
+
+  function saveKnownSongSnapshot() {
+    const knownSong = getCurrentFavoritePayload(false)
+    const snapshot = knownSong ? `${knownSong.videoId}|${knownSong.mainTone}|${knownSong.transitions?.map((item) => `${item.time}:${item.tone}`).join(',')}` : ''
+    if (!knownSong || !snapshot || snapshot === savedKnownSnapshotRef.current) return
+    savedKnownSnapshotRef.current = snapshot
+    nhacApp.saveKnownSong?.(knownSong).catch(console.error)
+  }
+
+  function captureFavoriteTone(keyName: string, event: EngineEvent) {
+    if (!isValidToneName(keyName)) return
+    const capture = toneCaptureRef.current
+
+    const isInitialLock = event.state === 'LOCKED_INITIAL'
+    const isClimaxLock = event.state === 'LOCKED_CLIMAX'
+
+    if (isInitialLock && (!capture.mainTone || !capture.mainLocked)) {
+      capture.mainTone = keyName
+      capture.mainLocked = true
+    }
+
+    if (isClimaxLock && !capture.mainTone) {
+      capture.mainTone = keyName
+      capture.mainLocked = true
+    }
+
+    const activeClimaxTone = capture.transitions[capture.transitions.length - 1]?.tone || capture.mainTone
+    const alreadyCapturedTone = capture.transitions.some((item) => item.tone === keyName)
+
+    if (isClimaxLock && capture.mainTone && keyName !== activeClimaxTone && !alreadyCapturedTone) {
+      capture.transitions.push({
+        time: Math.max(0, Number(event.playback_current_time || 0)),
+        tone: keyName,
+      })
+      if (cachedTonePlanRef.current.videoId === currentVideoRef.current.videoId) {
+        cachedTonePlanRef.current.transitions = [...capture.transitions]
+      }
+      saveKnownSongSnapshot()
+      if (transitionProbeModeRef.current) {
+        transitionProbeModeRef.current = false
+        stopAnalyzerBackend().catch(console.error)
+      }
+    }
+    capture.lastTone = keyName
+
+    // Auto-save logic to synchronize database and avoid race conditions
+    const videoId = currentVideoRef.current.videoId
+    if (videoId) {
+      const hasKnownTone = capture.mainLocked && isValidToneName(capture.mainTone)
+      const hasUsefulTransition = capture.transitions.length > 0
+      if (hasKnownTone || hasUsefulTransition) {
+        saveKnownSongSnapshot()
+      }
+
+      const favSong = favoriteSongsRef.current.find((item) => item.videoId === videoId)
+      if (favSong) {
+        const hasNoStoredTone = !favSong.mainTone || favSong.mainTone === '--'
+        const storedTransitionsCount = favSong.transitions?.length || 0
+        const hasNewTransitions = capture.transitions.length > storedTransitionsCount
+
+        if ((hasNoStoredTone && capture.mainLocked && isValidToneName(capture.mainTone)) || hasNewTransitions) {
+          const song = getCurrentFavoritePayload(false)
+          if (song) {
+            nhacApp.saveFavorite?.(song).then((songs) => {
+              if (songs) setFavoriteSongs(songs)
+            }).catch(console.error)
+          }
+        }
+      }
+    }
+  }
+
+  function getCurrentFavoritePayload(completed = false, duration = currentVideoRef.current.duration): FavoriteSong | null {
+    const video = currentVideoRef.current
+    if (!video.videoId) return null
+    const capture = toneCaptureRef.current
+    return {
+      videoId: video.videoId,
+      title: video.title || video.videoId,
+      url: video.url,
+      duration: duration || video.duration || 0,
+      mainTone: isValidToneName(capture.mainTone) ? capture.mainTone : '',
+      completed,
+      completedAt: completed ? new Date().toISOString() : '',
+      transitions: capture.transitions,
+    }
+  }
+
+  function isValidToneName(keyName?: string) {
+    return Boolean(keyName && keyName !== '--' && parseKey(keyName))
+  }
+
+  function clearCachedTonePlan() {
+    cachedTonePlanRef.current = { videoId: '', mainTone: '', transitions: [], activeTone: '' }
+  }
+
+  async function stopAnalyzerBackend() {
+    try {
+      await nhacApp.engineRequest('stop_analyzer')
+    } finally {
+      await nhacApp.stopEngineProcess?.()
+    }
+    setIsLive(false)
+  }
+
+  async function saveCurrentFavorite() {
+    const song = getCurrentFavoritePayload(false)
+    if (!song) {
+      setFavoriteStatus('Chưa có bài YouTube')
+      return
+    }
+    const songs = await nhacApp.saveFavorite?.(song) || [song]
+    setFavoriteSongs(songs)
+    setFavoriteStatus('Đã lưu yêu thích')
+  }
+
+  async function saveCompletedFavorite(duration: number) {
+    const videoId = currentVideoRef.current.videoId
+    if (!videoId || completedFavoriteVideoRef.current === videoId) return
+    const song = getCurrentFavoritePayload(true, duration)
+    if (!song) return
+    if (!isValidToneName(song.mainTone)) return
+    await nhacApp.saveKnownSong?.(song)
+    completedFavoriteVideoRef.current = videoId
+    if (favoriteSongsRef.current.some((item) => item.videoId === videoId)) {
+      const songs = await nhacApp.saveFavorite?.(song) || [song]
+      setFavoriteSongs(songs)
+      setFavoriteStatus('Saved completed tone')
+    }
+  }
+
+  async function useKnownSongTonePlan(song: FavoriteSong) {
+    const mainTone = song.mainTone || ''
+    if (!mainTone) return
+    const transitions = [...(song.transitions || [])].sort((left, right) => left.time - right.time)
+    cachedTonePlanRef.current = {
+      videoId: song.videoId,
+      mainTone,
+      transitions,
+      activeTone: mainTone,
+    }
+    toneCaptureRef.current = { mainTone, mainLocked: true, transitions, lastTone: mainTone }
+    currentVideoRef.current = {
+      videoId: song.videoId,
+      url: song.url || currentVideoRef.current.url,
+      title: song.title || currentVideoRef.current.title || song.videoId,
+      duration: song.duration || currentVideoRef.current.duration || 0,
+    }
+    manualStopRef.current = true
+    const shiftedTone = shiftKey(mainTone, pitchShiftRef.current)
+    if (isLiveRef.current) {
+      await stopAnalyzerBackend()
+    } else {
+      setIsLive(false)
+    }
+    setToneData({ tone: shiftedTone, confidence: 100, isDetecting: false })
+    setAnalysis({ latency: 'cache', window: 'saved', instant: mainTone })
+    lastAutoSentKey.current = shiftedTone
+    if (autoSendKeyRef.current) {
+      sendKeyScaleToCubase('cached', shiftedTone).catch(console.error)
+    }
+  }
+
+  function applyCachedToneForPlayback(currentTimeValue: number) {
+    const plan = cachedTonePlanRef.current
+    if (!plan.videoId || !plan.mainTone) return
+    const activeTransition = [...plan.transitions].reverse().find((item) => currentTimeValue >= item.time)
+    const nextTone = activeTransition?.tone || plan.mainTone
+    if (!nextTone || nextTone === plan.activeTone) return
+    plan.activeTone = nextTone
+    const shiftedTone = shiftKey(nextTone, pitchShiftRef.current)
+    setToneData({ tone: shiftedTone, confidence: 100, isDetecting: false })
+    setAnalysis({ latency: 'cache', window: 'saved', instant: nextTone })
+    if (autoSendKeyRef.current) {
+      sendKeyScaleToCubase('cached_transition', shiftedTone).catch(console.error)
+    }
+  }
+
   async function startToneDetection() {
     manualStopRef.current = false
+    clearCachedTonePlan()
     const saved = await saveConfig()
     await nhacApp.engineRequest('configure', { midi_output_name: saved.midiOutputName })
     await nhacApp.engineRequest('start_analyzer', { reset_statistics: true })
     setToneData({ tone: '--', confidence: 0, isDetecting: true })
     setIsLive(true)
     lastAutoSentKey.current = ''
-    setPitchShift(0)
-    await sendMidi('tang_tong', cc.pitchShift, pitchDisplayToCc(0))
+    await resetPitchShiftToZero()
+  }
+
+  async function startTransitionProbe() {
+    manualStopRef.current = false
+    transitionProbeModeRef.current = true
+    const saved = await saveConfig()
+    await nhacApp.engineRequest('configure', { midi_output_name: saved.midiOutputName })
+    await nhacApp.engineRequest('seed_initial_key', {
+      key: cachedTonePlanRef.current.mainTone,
+      confidence: 1,
+      strength: 1,
+    })
+    await nhacApp.engineRequest('start_analyzer', { reset_statistics: false })
+    setIsLive(true)
+    setAnalysis((current) => ({ ...current, latency: 'probe', window: 'climax' }))
   }
 
   async function stopToneDetection() {
     manualStopRef.current = true
-    try {
-      await nhacApp.engineRequest('stop_analyzer')
-    } finally {
-      await nhacApp.stopEngineProcess?.()
-    }
+    transitionProbeModeRef.current = false
+    clearCachedTonePlan()
+    await stopAnalyzerBackend()
     setToneData({ tone: '--', confidence: 0, isDetecting: false })
-    setIsLive(false)
   }
 
   function getKeyScaleCcValues(keyName: string) {
@@ -882,15 +1240,16 @@ export default function ToneLinkAssistant() {
     if (control === cc.controls.beat) setControls((current) => ({ ...current, beat: isActive }))
     if (control === cc.controls.mic) setControls((current) => ({ ...current, mic: isActive }))
     if (control === cc.controls.vang) setControls((current) => ({ ...current, vang: isActive }))
-    if (control === cc.effects.tune) setEffects((current) => ({ ...current, tune: isActive }))
-    if (control === cc.effects.lofi) setEffects((current) => ({ ...current, lofi: isActive }))
-    if (control === cc.effects.remix) setEffects((current) => ({ ...current, remix: isActive }))
+    if (control === cc.effects.tune) setEffects((current) => ({ ...current, tune: !isActive }))
+    if (control === cc.effects.lofi) setEffects((current) => ({ ...current, lofi: !isActive }))
+    if (control === cc.effects.remix) setEffects((current) => ({ ...current, remix: !isActive }))
     if (control === cc.volumes.beat) setVolumes((current) => ({ ...current, beat: nextValue }))
     if (control === cc.volumes.mic) setVolumes((current) => ({ ...current, mic: nextValue }))
     if (control === cc.volumes.vang) setVolumes((current) => ({ ...current, vang: nextValue }))
     if (control === cc.volumes.vangNgan) setVolumes((current) => ({ ...current, vangNgan: nextValue }))
     if (control === cc.volumes.delay) setVolumes((current) => ({ ...current, delay: nextValue }))
     if (control === cc.pitchShift) setPitchShift(pitchCcToDisplay(nextValue))
+    if (control === cc.returnSpeed) setReturnSpeed(nextValue)
   }
 
   async function chooseCubasePath() {
@@ -912,6 +1271,8 @@ export default function ToneLinkAssistant() {
   async function importPreset() {
     await nhacApp.importPreset()
   }
+
+  const currentFavorite = favoriteSongs.find((song) => song.videoId === currentVideoRef.current.videoId)
 
   return (
     <div className="bg-transparent flex items-center justify-center p-0">
@@ -937,12 +1298,12 @@ export default function ToneLinkAssistant() {
             <div className="h-5 w-px bg-border" />
 
             <div className="flex items-center gap-1.5 shrink-0">
-              <div className="bg-background rounded-lg px-2 py-1 border border-border min-w-[52px] text-center">
+              <div className="bg-background rounded-lg px-2 py-1 border border-border w-[76px] text-center overflow-hidden">
                 <p className="text-[8px] text-muted-foreground uppercase">Tone</p>
                 {toneData.isDetecting && toneData.tone === '--' ? (
                   <p className="text-[9px] font-medium text-primary animate-pulse leading-tight whitespace-nowrap">Đang dò...</p>
                 ) : (
-                  <p className="text-sm font-bold font-mono text-foreground leading-tight">{toneData.tone}</p>
+                  <p className="text-sm font-bold font-mono text-foreground leading-tight truncate">{toneData.tone}</p>
                 )}
               </div>
               <div className="flex gap-0.5">
@@ -1033,6 +1394,22 @@ export default function ToneLinkAssistant() {
           <div className="flex items-center justify-between mt-2 pt-2 border-t border-border">
             <span className="text-[10px] text-muted-foreground">© TC Studio. All rights reserved.</span>
             <div className="flex items-center gap-1 no-drag">
+              <button
+                onClick={saveCurrentFavorite}
+                className={`p-1 rounded-md transition-all ${
+                  currentFavorite ? 'text-amber-400 bg-amber-400/15 hover:bg-amber-400/25' : 'text-muted-foreground hover:text-amber-400 hover:bg-muted'
+                }`}
+                title={favoriteStatus || (currentFavorite ? 'Đã lưu yêu thích' : 'Lưu bài đang nghe vào yêu thích')}
+              >
+                <Star className={`w-3 h-3 ${currentFavorite ? 'fill-amber-400/40' : ''}`} />
+              </button>
+              <button
+                onClick={() => nhacApp.openFavoritesWindow?.()}
+                className="p-1 rounded-md transition-all text-muted-foreground hover:text-foreground hover:bg-muted"
+                title="Mở danh sách yêu thích"
+              >
+                <Disc3 className="w-3 h-3" />
+              </button>
               <div className="relative">
                 <button
                   onClick={() => nhacApp.openSettingsWindow ? nhacApp.openSettingsWindow() : setShowSettings(!showSettings)}

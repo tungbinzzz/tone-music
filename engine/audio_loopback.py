@@ -347,6 +347,25 @@ class RealtimeAnalyzer:
         self._features.reset()
         self._midi_policy.reset()
 
+    def seed_initial_key(self, key_name: str, confidence: float = 1.0, strength: float = 1.0) -> None:
+        safe_key = str(key_name or "").strip()
+        if not safe_key or safe_key == "--":
+            return
+        self.state = STATE_LOCKED_INITIAL
+        self.current_locked_key = safe_key
+        self.current_locked_confidence = max(0.0, min(1.0, float(confidence or 1.0)))
+        self.current_locked_strength = max(0.0, min(1.0, float(strength or 1.0)))
+        self._key_votes = self.min_main_key_votes
+        self._initial_locked_at = time.time() - self.min_transition_seconds_after_lock
+        self._transition_started_at = 0.0
+        self._transition_build_streak = 0
+        self._transition_candidate_key = "--"
+        self._transition_candidate_votes = 0
+        self._initial_lock.reset()
+        self._candidate_lock.reset()
+        self._midi_policy.last_sent_key = safe_key
+        self.emit({"type": "engine_log", "level": "info", "text": f"Seeded known initial key: {safe_key}"})
+
     def _commit_key(self, key_name: str, confidence: float, strength: float, state: str, reason: str) -> None:
         self.current_locked_key = key_name
         self.current_locked_confidence = confidence

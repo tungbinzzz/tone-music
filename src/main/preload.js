@@ -3,6 +3,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('nhacApp', {
   getConfig: () => ipcRenderer.invoke('config:get'),
   saveConfig: (config) => ipcRenderer.invoke('config:save', config),
+  listFavorites: () => ipcRenderer.invoke('favorites:list'),
+  saveFavorite: (song) => ipcRenderer.invoke('favorites:save', song),
+  deleteFavorite: (videoId) => ipcRenderer.invoke('favorites:delete', videoId),
+  listKnownSongs: () => ipcRenderer.invoke('known-songs:list'),
+  getKnownSong: (videoId) => ipcRenderer.invoke('known-songs:get', videoId),
+  saveKnownSong: (song) => ipcRenderer.invoke('known-songs:save', song),
   selectCubase: () => ipcRenderer.invoke('dialog:select-cubase'),
   launchYoutube: (url) => ipcRenderer.invoke('app:launch-youtube', url),
   closeYoutube: () => ipcRenderer.invoke('app:close-youtube'),
@@ -11,6 +17,7 @@ contextBridge.exposeInMainWorld('nhacApp', {
   importPreset: () => ipcRenderer.invoke('preset:import'),
   openSettingsWindow: () => ipcRenderer.invoke('settings:open'),
   openLaughWindow: () => ipcRenderer.invoke('laughs:open'),
+  openFavoritesWindow: () => ipcRenderer.invoke('favorites:open'),
   closeCurrentWindow: () => ipcRenderer.invoke('window:close-current'),
   setMainWindowSize: (width, height) => ipcRenderer.invoke('window:set-main-size', width, height),
   minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
@@ -56,5 +63,10 @@ contextBridge.exposeInMainWorld('nhacApp', {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('config:changed', listener);
     return () => ipcRenderer.removeListener('config:changed', listener);
+  },
+  onFavoritesChanged: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('favorites:changed', listener);
+    return () => ipcRenderer.removeListener('favorites:changed', listener);
   }
 });

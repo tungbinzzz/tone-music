@@ -103,7 +103,7 @@ def send_key_cc(key_name: str, output_name: str = "", channel: int = 0, control:
         port.send(mido.Message("control_change", channel=channel, control=control, value=value))
 
 
-def send_control_cc(control: int, value: int, output_name: str = "", channel: int = 0) -> None:
+def send_control_cc(control: int, value: int, output_name: str = "", channel: int = 0) -> dict:
     if mido is None:
         raise RuntimeError("Missing dependency: mido/python-rtmidi. Install Python requirements first.")
 
@@ -115,3 +115,10 @@ def send_control_cc(control: int, value: int, output_name: str = "", channel: in
 
     with mido.open_output(target) as port:
         port.send(mido.Message("control_change", channel=safe_channel, control=safe_control, value=safe_value))
+
+    return {
+        "target": target,
+        "channel": safe_channel,
+        "control": safe_control,
+        "value": safe_value,
+    }

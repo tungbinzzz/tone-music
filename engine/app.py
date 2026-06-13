@@ -129,6 +129,17 @@ def handle(request: dict) -> None:
             reply(request_id, reset=True)
             return
 
+        if command == "seed_initial_key":
+            if analyzer is None:
+                analyzer = RealtimeAnalyzer(emit)
+            analyzer.seed_initial_key(
+                payload.get("key", ""),
+                confidence=payload.get("confidence", 1.0),
+                strength=payload.get("strength", 1.0),
+            )
+            reply(request_id, seeded=True)
+            return
+
         if command == "stop_analyzer":
             if analyzer:
                 analyzer.stop()
@@ -162,8 +173,8 @@ def handle(request: dict) -> None:
 
         if command == "set_cubase_cc":
             output_name = payload.get("midi_output_name") or config.get("midi_output_name", "")
-            send_control_cc(payload.get("control", 0), payload.get("value", 0), output_name, payload.get("channel", 0))
-            reply(request_id, sent=True)
+            sent = send_control_cc(payload.get("control", 0), payload.get("value", 0), output_name, payload.get("channel", 0))
+            reply(request_id, sent=True, **sent)
             return
 
         if command == "shutdown":
