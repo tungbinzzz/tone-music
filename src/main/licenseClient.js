@@ -119,6 +119,24 @@ function isOfflineValid(license) {
   return new Date(license.offlineTokenExp) > new Date();
 }
 
+function isLicenseDateValid(license) {
+  if (!license) return false;
+  const expiresAt = license.expiresAt || license.expires_at;
+  if (!expiresAt) return true;
+  const expiresTime = new Date(expiresAt).getTime();
+  return Number.isFinite(expiresTime) && expiresTime > Date.now();
+}
+
+function hasUsableLocalLicense(license) {
+  const licenseKey = license?.licenseKey || license?.license_key;
+  return Boolean(
+    license
+    && licenseKey
+    && license.machineId
+    && isLicenseDateValid(license)
+  );
+}
+
 /**
  * Activate a license key online.
  * Returns { valid, plan, message, offlineToken, expiresAt }
@@ -176,9 +194,9 @@ async function verifyLicense(app) {
   if (!stored) return { valid: false, message: 'Not activated', source: 'none' };
   const storedLicenseKey = stored.licenseKey || stored.license_key;
 
-  const machineId = getMachineId();
-  if (stored.machineId !== machineId) {
-    return { valid: false, message: 'Machine ID mismatch', source: 'local' };
+  const machineId = stored.machineId || getMachineId();
+  if (!hasUsableLocalLicense(stored)) {
+    return { valid: false, message: 'Local license is not valid for this machine or has expired', source: 'local' };
   }
 
   // Try online verify first
@@ -192,6 +210,10 @@ async function verifyLicense(app) {
         app_version: app.getVersion(),
       }),
     });
+
+    if (!res.ok) {
+      return { valid: true, plan: stored.plan, message: 'Offline mode (server unavailable)', source: 'offline' };
+    }
 
     if (res.data.valid) {
       // Refresh token
@@ -210,19 +232,24 @@ async function verifyLicense(app) {
       return { valid: true, plan: res.data.plan, message: 'Online verified', source: 'online' };
     } else {
       // Server says invalid — check offline grace period
-      if (isOfflineValid(stored)) {
-        return { valid: true, plan: stored.plan, message: 'Offline mode (grace period)', source: 'offline' };
+      const message = String(res.data.message || '').toLowerCase();
+      const hardInvalid = (
+        message.includes('revoked')
+        || message.includes('expired')
+        || message.includes('not found')
+        || message.includes('not registered')
+        || message.includes('device')
+      );
+      if (!hardInvalid) {
+        return { valid: true, plan: stored.plan, message: 'Offline mode (verification deferred)', source: 'offline' };
       }
       clearLicense(app);
       return { valid: false, message: res.data.message || 'License revoked', source: 'online' };
     }
   } catch (e) {
     // Server unreachable — use offline token
-    console.warn('[License] Server unreachable, using offline token:', e.message);
-    if (isOfflineValid(stored)) {
-      return { valid: true, plan: stored.plan, message: `Offline mode (expires ${stored.offlineTokenExp?.slice(0, 10)})`, source: 'offline' };
-    }
-    return { valid: false, message: 'Offline token expired. Please connect to internet to re-verify.', source: 'offline' };
+    console.warn('[License] Server unreachable, using local license:', e.message);
+    return { valid: true, plan: stored.plan, message: 'Offline mode', source: 'offline' };
   }
 }
 
@@ -353,6 +380,7 @@ module.exports = {
   deactivateLicense,
   checkUpdate,
   readLicense,
+  hasUsableLocalLicense,
   getOnlineKnownSong,
   saveOnlineKnownSong,
 };

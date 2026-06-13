@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron')
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { ElectronBlocker } = require('@ghostery/adblocker-electron');
 const licenseClient = require('./licenseClient');
 
 // Icon path: use build/icon.png in dev, resources/icon.png when packaged
@@ -32,6 +33,8 @@ let favoritesWindow;
 let engineProcess;
 let nextRequestId = 1;
 const pendingRequests = new Map();
+let adBlockerPromise;
+const adBlockedSessions = new WeakSet();
 
 function getConfigPath() {
   return path.join(app.getPath('userData'), 'app-config.json');
@@ -261,6 +264,34 @@ function emitToAllRenderers(channel, payload) {
   }
 }
 
+async function enableYoutubeAdBlocker(targetSession) {
+  if (!targetSession || adBlockedSessions.has(targetSession)) return;
+  if (typeof fetch !== 'function') {
+    emitToRenderer('engine:log', { level: 'warn', text: 'Ad blocker unavailable: fetch is not supported in this runtime.' });
+    return;
+  }
+
+  if (!adBlockerPromise) {
+    const cachePath = path.join(app.getPath('userData'), 'adblocker-engine.bin');
+    adBlockerPromise = ElectronBlocker.fromPrebuiltAdsAndTracking(
+      (...args) => fetch(...args),
+      {
+        path: cachePath,
+        read: fs.promises.readFile,
+        write: async (filePath, data) => {
+          await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+          await fs.promises.writeFile(filePath, data);
+        }
+      }
+    );
+  }
+
+  const blocker = await adBlockerPromise;
+  blocker.enableBlockingInSession(targetSession);
+  adBlockedSessions.add(targetSession);
+  emitToRenderer('engine:log', { level: 'info', text: 'YouTube ad blocker enabled.' });
+}
+
 function resolveEnginePath() {
   return path.join(app.getAppPath(), 'engine', 'app.py');
 }
@@ -481,7 +512,16 @@ function openYoutubeWindow(url) {
     youtubeWindow = undefined;
   });
 
-  loadRendererWindow(youtubeWindow, `?view=youtube&url=${encodeURIComponent(targetUrl)}`);
+  enableYoutubeAdBlocker(youtubeWindow.webContents.session)
+    .catch((error) => {
+      adBlockerPromise = undefined;
+      emitToRenderer('engine:log', { level: 'warn', text: `Cannot enable YouTube ad blocker: ${error.message}` });
+    })
+    .finally(() => {
+      if (youtubeWindow && !youtubeWindow.isDestroyed()) {
+        loadRendererWindow(youtubeWindow, `?view=youtube&url=${encodeURIComponent(targetUrl)}`);
+      }
+    });
   return true;
 }
 

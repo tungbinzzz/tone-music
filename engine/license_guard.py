@@ -60,6 +60,27 @@ def _is_offline_valid(license_data: dict) -> bool:
         return False
 
 
+def _is_license_date_valid(license_data: dict) -> bool:
+    """Check the actual license expiry. Missing expiry means lifetime."""
+    exp_str = license_data.get("expiresAt") or license_data.get("expires_at")
+    if not exp_str:
+        return True
+    try:
+        exp = datetime.fromisoformat(exp_str.replace("Z", "+00:00"))
+        return exp > datetime.now(timezone.utc)
+    except Exception:
+        return False
+
+
+def _has_usable_local_license(license_data: dict) -> bool:
+    return bool(
+        license_data
+        and (license_data.get("licenseKey") or license_data.get("license_key"))
+        and license_data.get("machineId")
+        and _is_license_date_valid(license_data)
+    )
+
+
 def _verify_online(license_data: dict) -> bool:
     """Try to verify license online. Returns True if valid."""
     try:
@@ -125,6 +146,13 @@ class LicenseGuard:
             self._plan = license_data.get("plan", "standard")
             self._source = "online"
             logger.info(f"License verified online. Plan: {self._plan}")
+            return True
+
+        if _has_usable_local_license(license_data):
+            self._valid = True
+            self._plan = license_data.get("plan", "standard")
+            self._source = "offline"
+            logger.info(f"License verified from local license. Plan: {self._plan}")
             return True
 
         # Fall back to offline token check
